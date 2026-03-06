@@ -30,7 +30,8 @@ SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 SYNC_DAYS          = int(os.environ.get("SYNC_DAYS", "90"))
 
 FINTOC_BASE        = "https://api.fintoc.com/v1"
-FINTOC_HEADERS     = {"Authorization": f"Bearer {FINTOC_SECRET_KEY}"}
+# Para endpoints de link, usar el link_token como Bearer token
+FINTOC_HEADERS     = {"Authorization": FINTOC_LINK_TOKEN}
 BATCH_SIZE         = 500   # filas por upsert a Supabase
 PER_PAGE           = 300   # máximo permitido por Fintoc
 
