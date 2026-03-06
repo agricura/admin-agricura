@@ -193,7 +193,7 @@ export default function App() {
             />
           )}
           {currentView === 'bank' && (
-            <BankView />
+            <BankView supabase={supabaseClient} />
           )}
         </div>
 

@@ -1,0 +1,40 @@
+name: Sync Fintoc → Supabase
+
+on:
+  schedule:
+    # Cada 6 horas: 00:00, 06:00, 12:00, 18:00 UTC (equivale a -3h / -4h en Chile)
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    # Permite dispararlo manualmente desde GitHub Actions UI
+    inputs:
+      days:
+        description: 'Días hacia atrás a sincronizar (default: 90)'
+        required: false
+        default: '90'
+
+jobs:
+  sync:
+    name: Sync bank transactions
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests supabase
+
+      - name: Run sync script
+        run: python scripts/sync_fintoc.py
+        env:
+          FINTOC_SECRET_KEY: ${{ secrets.FINTOC_SECRET_KEY }}
+          FINTOC_LINK_TOKEN: ${{ secrets.FINTOC_LINK_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SYNC_DAYS: ${{ github.event.inputs.days || '90' }}
