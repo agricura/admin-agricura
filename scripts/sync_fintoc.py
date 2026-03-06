@@ -30,12 +30,12 @@ SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 SYNC_DAYS          = int(os.environ.get("SYNC_DAYS", "90"))
 
 FINTOC_BASE        = "https://api.fintoc.com/v1"
-# Para endpoints de link, usar el link_token como Bearer token
-FINTOC_HEADERS     = {"Authorization": FINTOC_LINK_TOKEN}
+# Para la REST API de Fintoc: secret_key en Authorization, link_token en query params
+FINTOC_HEADERS     = {"Authorization": FINTOC_SECRET_KEY}
 BATCH_SIZE         = 500   # filas por upsert a Supabase
 PER_PAGE           = 300   # máximo permitido por Fintoc
 
-# Extraer link_id del link_token (formato: link_XXX_token_YYY)
+# Extraer link_id del link_token (formato: link_XXX_token_YYY) - para debug
 FINTOC_LINK_ID = FINTOC_LINK_TOKEN.split("_token_")[0] if "_token_" in FINTOC_LINK_TOKEN else FINTOC_LINK_TOKEN
 
 
@@ -74,8 +74,9 @@ def get_since_date(supabase_client) -> str:
 
 
 def get_accounts() -> list:
-    url = f"{FINTOC_BASE}/links/{FINTOC_LINK_ID}/accounts"
-    resp = requests.get(url, headers=FINTOC_HEADERS, timeout=30)
+    url = f"{FINTOC_BASE}/accounts"
+    params = {"link_token": FINTOC_LINK_TOKEN}
+    resp = requests.get(url, headers=FINTOC_HEADERS, params=params, timeout=30)
     resp.raise_for_status()
     return resp.json()
 
@@ -84,10 +85,15 @@ def get_movements(account_id: str, since: str) -> list:
     """Obtiene todos los movimientos paginando con per_page=300."""
     all_movements = []
     page = 1
-    url = f"{FINTOC_BASE}/links/{FINTOC_LINK_ID}/accounts/{account_id}/movements"
+    url = f"{FINTOC_BASE}/accounts/{account_id}/movements"
 
     while True:
-        params = {"since": since, "page": page, "per_page": PER_PAGE}
+        params = {
+            "link_token": FINTOC_LINK_TOKEN,
+            "since": since,
+            "page": page,
+            "per_page": PER_PAGE
+        }
         resp = requests.get(url, headers=FINTOC_HEADERS, params=params, timeout=30)
         resp.raise_for_status()
         data = resp.json()
