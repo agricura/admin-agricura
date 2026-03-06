@@ -30,6 +30,19 @@ jobs:
       - name: Install dependencies
         run: pip install requests supabase
 
+      - name: Verify secrets (debug)
+        run: |
+          echo "Checking environment variables..."
+          if [ -z "$FINTOC_SECRET_KEY" ]; then echo "❌ FINTOC_SECRET_KEY is empty"; else echo "✓ FINTOC_SECRET_KEY present (${#FINTOC_SECRET_KEY} chars)"; fi
+          if [ -z "$FINTOC_LINK_TOKEN" ]; then echo "❌ FINTOC_LINK_TOKEN is empty"; else echo "✓ FINTOC_LINK_TOKEN present (${#FINTOC_LINK_TOKEN} chars)"; fi
+          if [ -z "$SUPABASE_URL" ]; then echo "❌ SUPABASE_URL is empty"; else echo "✓ SUPABASE_URL present"; fi
+          if [ -z "$SUPABASE_SERVICE_KEY" ]; then echo "❌ SUPABASE_SERVICE_KEY is empty"; else echo "✓ SUPABASE_SERVICE_KEY present (${#SUPABASE_SERVICE_KEY} chars)"; fi
+        env:
+          FINTOC_SECRET_KEY: ${{ secrets.FINTOC_SECRET_KEY }}
+          FINTOC_LINK_TOKEN: ${{ secrets.FINTOC_LINK_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+
       - name: Run sync script
         run: python scripts/sync_fintoc.py
         env:
