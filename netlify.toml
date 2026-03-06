@@ -1,0 +1,10 @@
+# ─── Admin app (admin-agricura subfolder) ────────────────────────────
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# React SPA — redirect all routes to index.html
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200
