@@ -3,7 +3,16 @@
   command = "npm run build"
   publish = "dist"
 
-# React SPA — redirect all routes to index.html
+[functions]
+  directory = "netlify/functions"
+
+# Let Netlify Functions handle /api/* paths
+[[redirects]]
+  from   = "/api/*"
+  to     = "/.netlify/functions/:splat"
+  status = 200
+
+# React SPA — redirect all other routes to index.html
 [[redirects]]
   from   = "/*"
   to     = "/index.html"

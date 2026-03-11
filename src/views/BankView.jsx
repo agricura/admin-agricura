@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { formatDate } from '../utils/formatters';
 
+const IS_DEV = import.meta.env.DEV;
 const SERVER_URL = 'http://localhost:3001';
 
 const formatCLP = (amount) =>
@@ -87,29 +88,56 @@ export default function BankView({ supabase }) {
     }
   }, [supabase, days]);
 
-  const triggerServerSync = async () => {
+  const triggerSync = async () => {
     try {
-      const res = await fetch(`${SERVER_URL}/api/fintoc/sync?days=${days}`, {
+      if (IS_DEV) {
+        // Dev: call local server directly (instant sync + upsert)
+        const res = await fetch(`${SERVER_URL}/api/fintoc/sync?days=${days}`, {
+          method: 'POST',
+          signal: AbortSignal.timeout(60000),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+        return { ok: true, message: data.message };
+      }
+      // Production: trigger GitHub Action via Netlify function
+      const res = await fetch('/api/trigger-sync', {
         method: 'POST',
-        signal: AbortSignal.timeout(60000),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ days }),
+        signal: AbortSignal.timeout(15000),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
       return { ok: true, message: data.message };
     } catch (err) {
-      return { ok: false, message: null };
+      const msg = err.name === 'TimeoutError'
+        ? 'Tiempo de espera agotado — el servidor tardó demasiado.'
+        : IS_DEV && (err.message?.includes('fetch') || err.message?.includes('Failed'))
+          ? 'No se pudo conectar al servidor local (puerto 3001). ¿Está corriendo `npm run server`?'
+          : (err.message ?? 'Error desconocido al sincronizar.');
+      return { ok: false, message: msg };
     }
   };
 
   const handleRefresh = async () => {
     setSyncing(true);
     setSyncMsg(null);
-    const result = await triggerServerSync();
-    await loadFromSupabase();
+    const result = await triggerSync();
+    if (IS_DEV) {
+      // Dev: data is already in Supabase, reload immediately
+      await loadFromSupabase();
+    } else {
+      // Production: GitHub Action takes ~1-2 min, reload now to show current data
+      await loadFromSupabase();
+    }
     setSyncing(false);
     if (result.ok) {
       setSyncMsg({ type: 'ok', text: result.message });
-      setTimeout(() => setSyncMsg(null), 6000);
+      setTimeout(() => setSyncMsg(null), 8000);
+    } else {
+      setSyncMsg({ type: 'error', text: result.message });
+      setTimeout(() => setSyncMsg(null), 8000);
     }
   };
 
@@ -178,8 +206,14 @@ export default function BankView({ supabase }) {
 
       {/* Feedback sync */}
       {syncMsg && (
-        <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-sm text-emerald-700">
-          <Database size={16} className="shrink-0 mt-0.5" />
+        <div className={`flex items-start gap-3 rounded-xl p-4 text-sm ${
+          syncMsg.type === 'error'
+            ? 'bg-rose-50 border border-rose-200 text-rose-700'
+            : 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+        }`}>
+          {syncMsg.type === 'error'
+            ? <AlertCircle size={16} className="shrink-0 mt-0.5" />
+            : <Database size={16} className="shrink-0 mt-0.5" />}
           <p className="font-medium">{syncMsg.text}</p>
         </div>
       )}
