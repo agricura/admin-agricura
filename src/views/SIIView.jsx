@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { FileText, Settings2, Search, RefreshCw, X, ChevronUp, ChevronDown, Eye, EyeOff, Filter, ChevronLeft, ChevronRight, CheckCircle2 } from 'lucide-react';
+import MultiSelect from '../components/MultiSelect';
 
 const PAGE_SIZE = 20;
 
@@ -86,7 +87,7 @@ const fmtValue = (col, v) => {
   return String(v);
 };
 
-const EMPTY_FILTERS = { tipoCompra: '', tipoDoc: '', fechaDesde: '', fechaHasta: '', razonSocial: '' };
+const EMPTY_FILTERS = { tipoCompra: [], tipoDoc: [], fechaDesde: '', fechaHasta: '', razonSocial: '' };
 
 export default function SIIView({ supabase, onShowConfirm, onViewDetail }) {
   const [records, setRecords]           = useState([]);
@@ -161,8 +162,8 @@ export default function SIIView({ supabase, onShowConfirm, onViewDetail }) {
   const displayCols = ALL_COLUMNS.filter(c => visibleCols.includes(c.key));
 
   const tipoCompraOptions = useMemo(() => [...new Set(records.map(r => r.tipo_compra).filter(Boolean))].sort(), [records]);
-  const tipoDocOptions    = useMemo(() => [...new Set(records.map(r => r.tipo_doc).filter(v => v !== null && v !== undefined))].sort((a,b) => a-b), [records]);
-  const activeFilterCount = Object.values(filters).filter(v => v !== '').length;
+  const tipoDocOptions    = useMemo(() => [...new Set(records.map(r => String(r.tipo_doc)).filter(v => v !== 'null' && v !== 'undefined'))].sort((a,b) => Number(a)-Number(b)), [records]);
+  const activeFilterCount = Object.values(filters).filter(v => Array.isArray(v) ? v.length > 0 : v !== '').length;
 
   const filtered = useMemo(() => {
     let rows = records;
@@ -174,8 +175,8 @@ export default function SIIView({ supabase, onShowConfirm, onViewDetail }) {
         String(r.rut_proveedor || '').toLowerCase().includes(q)
       );
     }
-    if (filters.tipoCompra)  rows = rows.filter(r => r.tipo_compra === filters.tipoCompra);
-    if (filters.tipoDoc)     rows = rows.filter(r => String(r.tipo_doc) === String(filters.tipoDoc));
+    if (filters.tipoCompra.length > 0)  rows = rows.filter(r => filters.tipoCompra.includes(r.tipo_compra));
+    if (filters.tipoDoc.length > 0)    rows = rows.filter(r => filters.tipoDoc.includes(String(r.tipo_doc)));
     if (filters.razonSocial) { const q = filters.razonSocial.trim().toLowerCase(); rows = rows.filter(r => String(r.razon_social || '').toLowerCase().includes(q)); }
     if (filters.fechaDesde)  rows = rows.filter(r => toISODate(r.fecha_docto) >= filters.fechaDesde);
     if (filters.fechaHasta)  rows = rows.filter(r => { const d = toISODate(r.fecha_docto); return d && d <= filters.fechaHasta; });
@@ -368,37 +369,35 @@ export default function SIIView({ supabase, onShowConfirm, onViewDetail }) {
                 </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tipo Compra</label>
-                  <select value={filters.tipoCompra} onChange={e => setFilters(f => ({ ...f, tipoCompra: e.target.value }))}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400">
-                    <option value="">Todos</option>
-                    {tipoCompraOptions.map(o => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tipo Documento</label>
-                  <select value={filters.tipoDoc} onChange={e => setFilters(f => ({ ...f, tipoDoc: e.target.value }))}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400">
-                    <option value="">Todos</option>
-                    {tipoDocOptions.map(o => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Razón Social</label>
+                <MultiSelect
+                  label="Tipo Compra"
+                  options={tipoCompraOptions}
+                  selectedValues={filters.tipoCompra}
+                  onChange={(vals) => setFilters(f => ({ ...f, tipoCompra: vals }))}
+                  placeholder="Todos"
+                />
+                <MultiSelect
+                  label="Tipo Documento"
+                  options={tipoDocOptions}
+                  selectedValues={filters.tipoDoc}
+                  onChange={(vals) => setFilters(f => ({ ...f, tipoDoc: vals }))}
+                  placeholder="Todos"
+                />
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 uppercase mb-2 block tracking-wide px-1">Razón Social</label>
                   <input type="text" placeholder="Buscar proveedor..." value={filters.razonSocial}
                     onChange={e => setFilters(f => ({ ...f, razonSocial: e.target.value }))}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400" />
+                    className="w-full px-4 py-2.5 bg-white border border-slate-200 hover:border-slate-300 rounded-lg text-sm font-medium text-slate-700 placeholder-slate-400 focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none" />
                 </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Fecha Desde</label>
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 uppercase mb-2 block tracking-wide px-1">Fecha Desde</label>
                   <input type="date" value={filters.fechaDesde} onChange={e => setFilters(f => ({ ...f, fechaDesde: e.target.value }))}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400" />
+                    className="w-full px-4 py-2.5 bg-white border border-slate-200 hover:border-slate-300 rounded-lg text-sm font-medium text-slate-700 focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none" />
                 </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Fecha Hasta</label>
+                <div>
+                  <label className="text-xs font-semibold text-slate-500 uppercase mb-2 block tracking-wide px-1">Fecha Hasta</label>
                   <input type="date" value={filters.fechaHasta} onChange={e => setFilters(f => ({ ...f, fechaHasta: e.target.value }))}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400" />
+                    className="w-full px-4 py-2.5 bg-white border border-slate-200 hover:border-slate-300 rounded-lg text-sm font-medium text-slate-700 focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none" />
                 </div>
               </div>
             </div>

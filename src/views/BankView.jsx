@@ -1,10 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Landmark, RefreshCw, TrendingUp, TrendingDown, CreditCard,
-  AlertCircle, Loader2, ArrowUpRight, ArrowDownLeft, Database, Clock
+  AlertCircle, Loader2, ArrowUpRight, ArrowDownLeft, Database, Clock,
+  ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Search, Filter, X
 } from 'lucide-react';
 import { formatDate } from '../utils/formatters';
+import MultiSelect from '../components/MultiSelect';
 
+const PAGE_SIZE = 20;
 const IS_DEV = import.meta.env.DEV;
 const SERVER_URL = 'http://localhost:3001';
 
@@ -19,12 +22,15 @@ const RANGE_OPTIONS = [
   { label: '365 días', days: 365 },
 ];
 
-const STATUS_STYLES = {
-  pendiente:  'bg-amber-50   text-amber-700  border-amber-200',
-  conciliado: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  revisado:   'bg-blue-50    text-blue-700   border-blue-200',
-  ignorado:   'bg-slate-100  text-slate-500  border-slate-200',
-};
+
+const BANK_COLUMNS = [
+  { key: 'date',        label: 'Fecha',       type: 'date' },
+  { key: 'description', label: 'Descripción', type: 'text' },
+  { key: 'amount',      label: 'Monto',       type: 'money' },
+  { key: 'type',        label: 'Tipo',        type: 'tag' },
+];
+
+const EMPTY_BANK_FILTERS = { tipo: [], descripcion: '' };
 
 function groupByAccount(rows) {
   const map = new Map();
@@ -58,6 +64,12 @@ export default function BankView({ supabase }) {
   const [lastSyncedAt, setLastSyncedAt]       = useState(null);
   const [syncing, setSyncing]                 = useState(false);
   const [syncMsg, setSyncMsg]                 = useState(null);
+  const [page, setPage]                       = useState(1);
+  const [search, setSearch]                   = useState('');
+  const [sortKey, setSortKey]                 = useState('date');
+  const [sortDir, setSortDir]                 = useState('desc');
+  const [filters, setFilters]                 = useState(EMPTY_BANK_FILTERS);
+  const [showFilters, setShowFilters]         = useState(false);
 
   const loadFromSupabase = useCallback(async (daysParam) => {
     if (!supabase) return;
@@ -148,9 +160,118 @@ export default function BankView({ supabase }) {
 
   useEffect(() => { loadFromSupabase(30); }, [supabase]);
 
+  // Reset page when account, search, or filters change
+  useEffect(() => { setPage(1); }, [selectedAccount?.account_number, days, search, filters]);
+
   const activeMovements = selectedAccount?.movements ?? [];
-  const totalIngresos   = activeMovements.filter(m => m.amount > 0).reduce((s, m) => s + m.amount, 0);
-  const totalEgresos    = activeMovements.filter(m => m.amount < 0).reduce((s, m) => s + m.amount, 0);
+
+  const activeFilterCount = Object.values(filters).filter(v => Array.isArray(v) ? v.length > 0 : v !== '').length;
+  const isFiltered = search.trim() !== '' || activeFilterCount > 0;
+
+  const filtered = useMemo(() => {
+    let rows = activeMovements;
+
+    // Search
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      rows = rows.filter(r =>
+        String(r.description || '').toLowerCase().includes(q) ||
+        String(r.sender_name || '').toLowerCase().includes(q) ||
+        String(r.recipient_name || '').toLowerCase().includes(q)
+      );
+    }
+
+    // Filters
+    if (filters.tipo.length > 0) {
+      rows = rows.filter(r => {
+        const t = r.amount > 0 ? 'Ingreso' : 'Egreso';
+        return filters.tipo.includes(t);
+      });
+    }
+    if (filters.descripcion) {
+      const q = filters.descripcion.trim().toLowerCase();
+      rows = rows.filter(r => String(r.description || '').toLowerCase().includes(q));
+    }
+
+    // Sort
+    return [...rows].sort((a, b) => {
+      let av = a[sortKey] ?? '';
+      let bv = b[sortKey] ?? '';
+      if (sortKey === 'amount') return sortDir === 'asc' ? (av - bv) : (bv - av);
+      if (sortKey === 'type') { av = a.amount > 0 ? 'ingreso' : 'egreso'; bv = b.amount > 0 ? 'ingreso' : 'egreso'; }
+      return sortDir === 'asc' ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av));
+    });
+  }, [activeMovements, search, filters, sortKey, sortDir]);
+
+  const totalIngresos   = filtered.filter(m => m.amount > 0).reduce((s, m) => s + m.amount, 0);
+  const totalEgresos    = filtered.filter(m => m.amount < 0).reduce((s, m) => s + m.amount, 0);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage   = Math.min(page, totalPages);
+  const pageRows   = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  const handleSort = (key) => {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(key); setSortDir('asc'); }
+  };
+
+  const clearFilters = () => setFilters(EMPTY_BANK_FILTERS);
+
+  // ── Pagination component ──────────────────────────────────────────────────
+  const PaginationBar = ({ position }) => {
+    if (totalPages <= 1) return null;
+    const pages = Array.from({ length: totalPages }, (_, i) => i + 1)
+      .filter(p => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
+      .reduce((acc, p, idx, arr) => { if (idx > 0 && p - arr[idx - 1] > 1) acc.push('…'); acc.push(p); return acc; }, []);
+
+    if (position === 'bottom') return (
+      <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between gap-2">
+        <span className="text-xs text-slate-400">
+          Mostrando {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} de {filtered.length}
+        </span>
+        <div className="flex items-center gap-1">
+          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage === 1}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 border border-slate-200 disabled:opacity-30 disabled:pointer-events-none transition-all">
+            <ChevronLeft size={13} /> Anterior
+          </button>
+          <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 border border-slate-200 disabled:opacity-30 disabled:pointer-events-none transition-all">
+            Siguiente <ChevronRight size={13} />
+          </button>
+        </div>
+      </div>
+    );
+
+    // top
+    return (
+      <div className="flex items-center gap-1">
+        <button onClick={() => setPage(1)} disabled={safePage === 1}
+          className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-all">
+          <ChevronLeft size={13} />
+        </button>
+        <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage === 1}
+          className="px-2.5 py-1 rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-all">
+          Anterior
+        </button>
+        {pages.map((p, i) =>
+          p === '…'
+            ? <span key={`e${i}`} className="px-1 text-slate-300 text-xs">…</span>
+            : <button key={p} onClick={() => setPage(p)}
+                className={`w-7 h-7 rounded-lg text-xs font-semibold transition-all ${safePage === p ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'}`}>
+                {p}
+              </button>
+        )}
+        <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}
+          className="px-2.5 py-1 rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-all">
+          Siguiente
+        </button>
+        <button onClick={() => setPage(totalPages)} disabled={safePage === totalPages}
+          className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-all">
+          <ChevronRight size={13} />
+        </button>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -171,36 +292,6 @@ export default function BankView({ supabase }) {
               </span>
             )}
           </p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap shrink-0">
-          {/* Selector de rango */}
-          <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1">
-            {RANGE_OPTIONS.map(opt => (
-              <button
-                key={opt.days}
-                onClick={() => handleRangeChange(opt.days)}
-                disabled={loading || syncing}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  days === opt.days
-                    ? 'bg-white text-slate-800 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-700'
-                } disabled:opacity-50`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-          {/* Botón Actualizar */}
-          <button
-            onClick={handleRefresh}
-            disabled={loading || syncing}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 hover:border-emerald-300 hover:text-emerald-700 hover:bg-emerald-50 transition-all active:scale-[0.97] disabled:opacity-50"
-          >
-            {syncing
-              ? <Loader2 size={15} className="animate-spin" />
-              : <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />}
-            Actualizar
-          </button>
         </div>
       </header>
 
@@ -297,58 +388,152 @@ export default function BankView({ supabase }) {
                 <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-5">
                   <div className="flex items-center gap-2 mb-3">
                     <TrendingUp size={16} className="text-emerald-500" />
-                    <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wider">Ingresos ({days}d)</p>
+                    <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wider">Ingresos{isFiltered ? ' (filtrado)' : ''}</p>
                   </div>
                   <p className="text-xl font-bold text-emerald-700">{formatCLP(totalIngresos)}</p>
                   <p className="text-xs text-emerald-500 font-medium mt-0.5">
-                    {activeMovements.filter(m => m.amount > 0).length} transacciones
+                    {filtered.filter(m => m.amount > 0).length} transacciones
                   </p>
                 </div>
 
                 <div className="bg-rose-50 border border-rose-100 rounded-2xl p-5">
                   <div className="flex items-center gap-2 mb-3">
                     <TrendingDown size={16} className="text-rose-500" />
-                    <p className="text-xs font-semibold text-rose-600 uppercase tracking-wider">Egresos ({days}d)</p>
+                    <p className="text-xs font-semibold text-rose-600 uppercase tracking-wider">Egresos{isFiltered ? ' (filtrado)' : ''}</p>
                   </div>
                   <p className="text-xl font-bold text-rose-700">{formatCLP(totalEgresos)}</p>
                   <p className="text-xs text-rose-500 font-medium mt-0.5">
-                    {activeMovements.filter(m => m.amount < 0).length} transacciones
+                    {filtered.filter(m => m.amount < 0).length} transacciones
                   </p>
                 </div>
               </div>
 
-              {/* Movements table */}
-              <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-                <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-slate-900">
-                    Movimientos — últimos {days} días
-                    <span className="ml-2 text-xs font-semibold text-slate-400">({activeMovements.length})</span>
-                  </h3>
-                  <span className="text-xs text-slate-400 font-medium hidden sm:block">
-                    Datos desde Supabase · sync auto cada 6h
-                  </span>
+              {/* Search */}
+              <div className="relative">
+                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input type="text" placeholder="Buscar por descripción, remitente o destinatario..." value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-all" />
+                {search && <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X size={14} /></button>}
+              </div>
+
+              {/* Filters toggle + days selector + Actualizar */}
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={() => setShowFilters(p => !p)}
+                    className={`flex items-center gap-2 px-3.5 py-2 rounded-lg border text-sm font-medium transition-all active:scale-[0.98] ${showFilters ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm shadow-emerald-600/20' : 'border-slate-200 text-slate-600 hover:border-slate-300 bg-white'}`}
+                  >
+                    <Filter size={15} />
+                    <span>Filtros</span>
+                    {activeFilterCount > 0 && (
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${showFilters ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-700'}`}>{activeFilterCount}</span>
+                    )}
+                  </button>
+
+                  {/* Selector de rango */}
+                  <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1">
+                    {RANGE_OPTIONS.map(opt => (
+                      <button
+                        key={opt.days}
+                        onClick={() => handleRangeChange(opt.days)}
+                        disabled={loading || syncing}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                          days === opt.days
+                            ? 'bg-white text-slate-800 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700'
+                        } disabled:opacity-50`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Botón Actualizar — alineado a la derecha */}
+                  <button
+                    onClick={handleRefresh}
+                    disabled={loading || syncing}
+                    className="flex items-center gap-2 px-4 py-2 ml-auto bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 hover:border-emerald-300 hover:text-emerald-700 hover:bg-emerald-50 transition-all active:scale-[0.97] disabled:opacity-50"
+                  >
+                    {syncing
+                      ? <Loader2 size={15} className="animate-spin" />
+                      : <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />}
+                    Actualizar
+                  </button>
                 </div>
 
-                {activeMovements.length === 0 ? (
+                {showFilters && (
+                  <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm mt-3">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                        <Filter size={14} className="text-emerald-500" /> Filtros
+                        {activeFilterCount > 0 && <span className="bg-emerald-100 text-emerald-700 text-xs px-1.5 py-0.5 rounded-full font-bold">{activeFilterCount} activo{activeFilterCount !== 1 ? 's' : ''}</span>}
+                      </h3>
+                      <div className="flex items-center gap-2">
+                        {activeFilterCount > 0 && <button onClick={clearFilters} className="text-xs text-rose-500 font-medium hover:underline">Limpiar todo</button>}
+                        <button onClick={() => setShowFilters(false)} className="p-1 hover:bg-slate-100 rounded-lg text-slate-400"><X size={15} /></button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <MultiSelect
+                        label="Tipo"
+                        options={['Ingreso', 'Egreso']}
+                        selectedValues={filters.tipo}
+                        onChange={(vals) => setFilters(f => ({ ...f, tipo: vals }))}
+                        placeholder="Todos"
+                      />
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold text-slate-500 uppercase mb-2 block tracking-wide px-1">Descripción</label>
+                        <input type="text" placeholder="Buscar en descripción..." value={filters.descripcion}
+                          onChange={e => setFilters(f => ({ ...f, descripcion: e.target.value }))}
+                          className="w-full px-4 py-2.5 bg-white border border-slate-200 hover:border-slate-300 rounded-lg text-sm font-medium text-slate-700 placeholder-slate-400 focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Movements table */}
+              <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+                <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
+                  <span className="text-xs font-medium text-slate-500">
+                    {filtered.length} movimiento{filtered.length !== 1 ? 's' : ''} — últimos {days} días
+                    {isFiltered ? ' (filtrado)' : ''}
+                    {filtered.length > 0 && ` — pág. ${safePage}/${totalPages}`}
+                  </span>
+                  <PaginationBar position="top" />
+                </div>
+
+                {filtered.length === 0 ? (
                   <div className="py-16 text-center text-slate-400 text-sm font-medium">
-                    No hay movimientos en los últimos {days} días.
+                    {(search || activeFilterCount > 0)
+                      ? 'No hay movimientos que coincidan con los filtros aplicados.'
+                      : `No hay movimientos en los últimos ${days} días.`}
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-slate-100 bg-slate-50/60">
-                          <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Fecha</th>
-                          <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Descripción</th>
-                          <th className="text-right px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Monto</th>
-                          <th className="text-center px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Tipo</th>
-                          <th className="text-center px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Estado</th>
+                          {BANK_COLUMNS.map(col => {
+                            const align = col.type === 'money' ? 'text-right' : col.type === 'tag' ? 'text-center' : 'text-left';
+                            return (
+                              <th key={col.key} onClick={() => handleSort(col.key)}
+                                className={`${align} px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider cursor-pointer hover:text-slate-700 whitespace-nowrap select-none`}>
+                                <div className={`flex items-center gap-1 ${col.type === 'money' ? 'justify-end' : col.type === 'tag' ? 'justify-center' : ''}`}>
+                                  {col.label}
+                                  {sortKey === col.key
+                                    ? sortDir === 'asc' ? <ChevronUp size={12} className="text-emerald-500" /> : <ChevronDown size={12} className="text-emerald-500" />
+                                    : <ChevronUp size={12} className="opacity-0" />}
+                                </div>
+                              </th>
+                            );
+                          })}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {activeMovements.map((mov) => {
+                        {pageRows.map((mov) => {
                           const isCredit = mov.amount > 0;
-                          const statusStyle = STATUS_STYLES[mov.status] ?? STATUS_STYLES.pendiente;
                           return (
                             <tr key={mov.id} className="hover:bg-slate-50/60 transition-colors">
                               <td className="px-5 py-3.5 text-slate-500 font-medium whitespace-nowrap">
@@ -376,11 +561,6 @@ export default function BankView({ supabase }) {
                                     : <><ArrowUpRight size={11} />Egreso</>}
                                 </span>
                               </td>
-                              <td className="px-5 py-3.5 text-center">
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${statusStyle}`}>
-                                  {mov.status ?? 'pendiente'}
-                                </span>
-                              </td>
                             </tr>
                           );
                         })}
@@ -388,6 +568,8 @@ export default function BankView({ supabase }) {
                     </table>
                   </div>
                 )}
+
+                <PaginationBar position="bottom" />
               </div>
             </>
           )}
