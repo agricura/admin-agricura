@@ -1,8 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { ChevronLeft, Package, PlusCircle, MinusCircle } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ChevronLeft, Package, PlusCircle, MinusCircle, FileText, Upload, Loader2, Trash2 } from 'lucide-react';
 import DateInput from '../components/DateInput';
 import SelectInput from '../components/SelectInput';
 import { formatCLP } from '../utils/formatters';
+
+const BUCKET = 'invoice-documents';
+const ALLOWED_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+const ACCEPT_STRING = '.pdf,.jpg,.jpeg,.png,.webp,.heic,.heif';
 
 function InvoiceForm({ supabase, onSuccess, invoiceToEdit, onShowConfirm }) {
   const [loading, setLoading] = useState(false);
@@ -26,6 +30,49 @@ function InvoiceForm({ supabase, onSuccess, invoiceToEdit, onShowConfirm }) {
 
   const [focusField, setFocusField] = useState(null);
   const [tipoOptions, setTipoOptions] = useState(['Factura', 'Boleta', 'Nota de Crédito', 'Nota de Débito', 'Otro']);
+  const [pdfUrl, setPdfUrl] = useState(invoiceToEdit?.document_url || null);
+  const [pdfFile, setPdfFile] = useState(null);
+  const [uploadingPdf, setUploadingPdf] = useState(false);
+  const [pdfError, setPdfError] = useState(null);
+  const pdfInputRef = useRef(null);
+
+  const handlePdfSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!ALLOWED_TYPES.includes(file.type)) { setPdfError('Solo se permiten PDF o imágenes (JPG, PNG, WebP).'); return; }
+    if (file.size > 10 * 1024 * 1024) { setPdfError('El archivo no puede superar 10 MB.'); return; }
+    setPdfError(null);
+    setPdfFile(file);
+  };
+
+  const handlePdfRemove = () => {
+    // If it's just a staged file (not yet uploaded), remove without confirmation
+    if (pdfFile && !pdfUrl) {
+      setPdfFile(null);
+      if (pdfInputRef.current) pdfInputRef.current.value = '';
+      return;
+    }
+    onShowConfirm({
+      title: 'Eliminar documento',
+      message: '¿Está seguro que desea eliminar el documento adjunto? Esta acción no se puede deshacer.',
+      type: 'danger',
+      confirmText: 'Eliminar',
+      onConfirm: async () => {
+        if (pdfUrl && invoiceToEdit) {
+          setUploadingPdf(true);
+          try {
+            const parts = pdfUrl.split(`/storage/v1/object/public/${BUCKET}/`);
+            if (parts[1]) await supabase.storage.from(BUCKET).remove([decodeURIComponent(parts[1])]);
+            await supabase.from('invoices').update({ document_url: null }).eq('id', invoiceToEdit.id);
+          } catch { /* best effort */ }
+          setUploadingPdf(false);
+        }
+        setPdfUrl(null);
+        setPdfFile(null);
+        if (pdfInputRef.current) pdfInputRef.current.value = '';
+      },
+    });
+  };
 
   useEffect(() => {
     supabase
@@ -76,10 +123,26 @@ function InvoiceForm({ supabase, onSuccess, invoiceToEdit, onShowConfirm }) {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       const payload = { ...formData, items: formData.items.filter((it) => it.detalle.trim() !== ''), created_by: user.id };
-      let res = invoiceToEdit
-        ? await supabase.from('invoices').update(payload).eq('id', invoiceToEdit.id)
-        : await supabase.from('invoices').insert([payload]);
+      let res;
+      if (invoiceToEdit) {
+        res = await supabase.from('invoices').update(payload).eq('id', invoiceToEdit.id).select();
+      } else {
+        res = await supabase.from('invoices').insert([payload]).select();
+      }
       if (res.error) throw res.error;
+
+      // Upload PDF if a file was selected
+      const savedId = invoiceToEdit?.id || res.data?.[0]?.id;
+      if (pdfFile && savedId) {
+        const ext = pdfFile.name.split('.').pop().toLowerCase();
+        const path = `${savedId}/${Date.now()}.${ext}`;
+        const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, pdfFile, { upsert: true });
+        if (upErr) throw upErr;
+        const { data: { publicUrl } } = supabase.storage.from(BUCKET).getPublicUrl(path);
+        const { error: dbErr } = await supabase.from('invoices').update({ document_url: publicUrl }).eq('id', savedId);
+        if (dbErr) throw dbErr;
+      }
+
       onSuccess();
     } catch (err) {
       onShowConfirm({ title: 'Error de Guardado', message: err.message, type: 'danger', onConfirm: () => {} });
@@ -210,6 +273,46 @@ function InvoiceForm({ supabase, onSuccess, invoiceToEdit, onShowConfirm }) {
             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide px-1">Categoría Contable</label>
             <input name="item" value={formData.item} onChange={handleGeneralChange} className="w-full bg-slate-50 border border-slate-200 hover:border-slate-300 px-4 py-2.5 rounded-lg outline-none font-medium text-slate-800 uppercase text-sm transition-all focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 placeholder:text-slate-400 placeholder:normal-case" placeholder="Ej: Insumos Químicos" />
           </div>
+        </div>
+
+        {/* SECCIÓN 5: DOCUMENTO PDF */}
+        <div className="space-y-4 pt-6 border-t border-slate-100">
+          <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide flex items-center gap-2">
+            <FileText size={18} className="text-blue-500" /> Documento Original
+          </h3>
+          {pdfUrl && !pdfFile ? (
+            <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+              <FileText size={20} className="text-emerald-600 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-emerald-800">Documento adjunto</p>
+                <a href={pdfUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-emerald-600 hover:underline truncate block">Ver PDF actual</a>
+              </div>
+              <button type="button" onClick={handlePdfRemove} disabled={uploadingPdf} className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-xs font-medium transition-all active:scale-[0.98] disabled:opacity-50">
+                {uploadingPdf ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />} Eliminar
+              </button>
+            </div>
+          ) : pdfFile ? (
+            <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+              <FileText size={20} className="text-blue-600 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-blue-800 truncate">{pdfFile.name}</p>
+                <p className="text-xs text-blue-500">{(pdfFile.size / 1024).toFixed(0)} KB — se subirá al guardar</p>
+              </div>
+              <button type="button" onClick={handlePdfRemove} className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-xs font-medium transition-all active:scale-[0.98]">
+                <Trash2 size={13} /> Quitar
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-3 py-6 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+              <FileText size={28} className="text-slate-300" />
+              <p className="text-slate-400 text-sm font-medium">Sin documento adjunto</p>
+              <input ref={pdfInputRef} type="file" accept={ACCEPT_STRING} onChange={handlePdfSelect} className="hidden" />
+              <button type="button" onClick={() => pdfInputRef.current?.click()} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold transition-all active:scale-[0.97]">
+                <Upload size={15} /> Adjuntar archivo
+              </button>
+            </div>
+          )}
+          {pdfError && <p className="text-sm text-rose-600 font-medium">{pdfError}</p>}
         </div>
 
         <div className="flex flex-col md:flex-row justify-end gap-3 pt-6 border-t border-slate-100">

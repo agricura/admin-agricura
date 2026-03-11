@@ -1,8 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Package, X, Pencil, FileText, Upload, Loader2, ExternalLink, Trash2 } from 'lucide-react';
 import { formatCLP, formatDate } from '../utils/formatters';
+import ConfirmModal from './ConfirmModal';
 
 const BUCKET = 'invoice-documents';
+const ALLOWED_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+const ACCEPT_STRING = '.pdf,.jpg,.jpeg,.png,.webp,.heic,.heif';
+
+const isImage = (url) => url && /\.(jpe?g|png|webp|heic|heif)(\?|$)/i.test(url);
 
 const InvoiceDetailModal = ({ invoice, onClose, onEdit, supabase }) => {
   if (!invoice) return null;
@@ -10,23 +15,25 @@ const InvoiceDetailModal = ({ invoice, onClose, onEdit, supabase }) => {
   const todayStr = new Date().toISOString().split('T')[0];
   const fileInputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
-  const [pdfUrl, setPdfUrl] = useState(invoice.document_url || null);
-  const [showPdf, setShowPdf] = useState(false);
+  const [docUrl, setDocUrl] = useState(invoice.document_url || null);
+  const [showDoc, setShowDoc] = useState(false);
   const [uploadError, setUploadError] = useState(null);
+  const [confirm, setConfirm] = useState({ isOpen: false, onConfirm: () => {} });
 
-  // Refresh pdfUrl if invoice changes
-  useEffect(() => { setPdfUrl(invoice.document_url || null); }, [invoice.document_url]);
+  // Refresh docUrl if invoice changes
+  useEffect(() => { setDocUrl(invoice.document_url || null); }, [invoice.document_url]);
 
   const handleUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file || !supabase) return;
-    if (file.type !== 'application/pdf') { setUploadError('Solo se permiten archivos PDF.'); return; }
+    if (!ALLOWED_TYPES.includes(file.type)) { setUploadError('Solo se permiten PDF o imágenes (JPG, PNG, WebP).'); return; }
     if (file.size > 10 * 1024 * 1024) { setUploadError('El archivo no puede superar 10 MB.'); return; }
 
     setUploading(true);
     setUploadError(null);
     try {
-      const path = `${invoice.id}/${Date.now()}.pdf`;
+      const ext = file.name.split('.').pop().toLowerCase();
+      const path = `${invoice.id}/${Date.now()}.${ext}`;
       const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file, { upsert: true });
       if (upErr) throw upErr;
 
@@ -35,7 +42,7 @@ const InvoiceDetailModal = ({ invoice, onClose, onEdit, supabase }) => {
       const { error: dbErr } = await supabase.from('invoices').update({ document_url: publicUrl }).eq('id', invoice.id);
       if (dbErr) throw dbErr;
 
-      setPdfUrl(publicUrl);
+      setDocUrl(publicUrl);
       invoice.document_url = publicUrl;
     } catch (err) {
       setUploadError(err.message);
@@ -45,24 +52,28 @@ const InvoiceDetailModal = ({ invoice, onClose, onEdit, supabase }) => {
     }
   };
 
-  const handleDelete = async () => {
-    if (!supabase || !pdfUrl) return;
-    setUploading(true);
-    try {
-      // Extract storage path from public URL
-      const parts = pdfUrl.split(`/storage/v1/object/public/${BUCKET}/`);
-      if (parts[1]) {
-        await supabase.storage.from(BUCKET).remove([decodeURIComponent(parts[1])]);
-      }
-      await supabase.from('invoices').update({ document_url: null }).eq('id', invoice.id);
-      setPdfUrl(null);
-      invoice.document_url = null;
-      setShowPdf(false);
-    } catch (err) {
-      setUploadError(err.message);
-    } finally {
-      setUploading(false);
-    }
+  const confirmDelete = () => {
+    if (!supabase || !docUrl) return;
+    setConfirm({
+      isOpen: true,
+      onConfirm: async () => {
+        setUploading(true);
+        try {
+          const parts = docUrl.split(`/storage/v1/object/public/${BUCKET}/`);
+          if (parts[1]) {
+            await supabase.storage.from(BUCKET).remove([decodeURIComponent(parts[1])]);
+          }
+          await supabase.from('invoices').update({ document_url: null }).eq('id', invoice.id);
+          setDocUrl(null);
+          invoice.document_url = null;
+          setShowDoc(false);
+        } catch (err) {
+          setUploadError(err.message);
+        } finally {
+          setUploading(false);
+        }
+      },
+    });
   };
 
   return (
@@ -129,21 +140,21 @@ const InvoiceDetailModal = ({ invoice, onClose, onEdit, supabase }) => {
             </div>
           </div>
 
-          {/* Documento PDF */}
+          {/* Documento Original */}
           <div className="space-y-3">
             <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-100 pb-2">Documento Original</h4>
-            {pdfUrl ? (
+            {docUrl ? (
               <div className="space-y-3">
                 <div className="flex items-center gap-2 flex-wrap">
                   <button
-                    onClick={() => setShowPdf(!showPdf)}
+                    onClick={() => setShowDoc(!showDoc)}
                     className="flex items-center gap-2 px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-sm font-semibold transition-all active:scale-[0.97]"
                   >
                     <FileText size={15} />
-                    {showPdf ? 'Ocultar documento' : 'Ver documento'}
+                    {showDoc ? 'Ocultar documento' : 'Ver documento'}
                   </button>
                   <a
-                    href={pdfUrl}
+                    href={docUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-sm font-medium transition-all active:scale-[0.97]"
@@ -152,7 +163,7 @@ const InvoiceDetailModal = ({ invoice, onClose, onEdit, supabase }) => {
                   </a>
                   {supabase && (
                     <button
-                      onClick={handleDelete}
+                      onClick={confirmDelete}
                       disabled={uploading}
                       className="flex items-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-sm font-medium transition-all active:scale-[0.97] disabled:opacity-50"
                     >
@@ -160,9 +171,11 @@ const InvoiceDetailModal = ({ invoice, onClose, onEdit, supabase }) => {
                     </button>
                   )}
                 </div>
-                {showPdf && (
+                {showDoc && (
                   <div className="rounded-xl overflow-hidden border border-slate-200 bg-white">
-                    <iframe src={pdfUrl} className="w-full h-[500px]" title="Documento PDF" />
+                    {isImage(docUrl)
+                      ? <img src={docUrl} alt="Documento" className="w-full max-h-[500px] object-contain" />
+                      : <iframe src={docUrl} className="w-full h-[500px]" title="Documento PDF" />}
                   </div>
                 )}
               </div>
@@ -172,14 +185,14 @@ const InvoiceDetailModal = ({ invoice, onClose, onEdit, supabase }) => {
                 <p className="text-slate-400 text-sm font-medium">Sin documento adjunto</p>
                 {supabase && (
                   <>
-                    <input ref={fileInputRef} type="file" accept=".pdf" onChange={handleUpload} className="hidden" />
+                    <input ref={fileInputRef} type="file" accept={ACCEPT_STRING} onChange={handleUpload} className="hidden" />
                     <button
                       onClick={() => fileInputRef.current?.click()}
                       disabled={uploading}
                       className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold transition-all active:scale-[0.97] disabled:opacity-50"
                     >
                       {uploading ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
-                      Subir PDF
+                      Subir archivo
                     </button>
                   </>
                 )}
@@ -205,6 +218,16 @@ const InvoiceDetailModal = ({ invoice, onClose, onEdit, supabase }) => {
           </div>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={confirm.isOpen}
+        onClose={() => setConfirm({ ...confirm, isOpen: false })}
+        onConfirm={confirm.onConfirm}
+        title="Eliminar documento"
+        message="¿Está seguro que desea eliminar el documento adjunto? Esta acción no se puede deshacer."
+        confirmText="Eliminar"
+        type="danger"
+      />
     </div>
   );
 };
