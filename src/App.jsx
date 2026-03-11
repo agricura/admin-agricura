@@ -202,6 +202,7 @@ export default function App() {
             invoice={viewingInvoice}
             onClose={() => setViewingInvoice(null)}
             onEdit={(inv) => { setViewingInvoice(null); setInvoiceToEdit(inv); setCurrentView('form'); }}
+            supabase={supabaseClient}
           />
         )}
       </main>

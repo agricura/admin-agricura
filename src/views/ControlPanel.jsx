@@ -739,6 +739,7 @@ export default function ControlPanel({ supabase }) {
         <InvoiceDetailModal
           invoice={viewingInvoice}
           onClose={() => setViewingInvoice(null)}
+          supabase={supabase}
         />
       )}
 
