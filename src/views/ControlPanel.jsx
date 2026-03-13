@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   LayoutDashboard, CheckCircle, Clock, FileText,
   TrendingUp, AlertTriangle, BarChart3, Loader2, Calendar, X,
-  ChevronLeft, ChevronRight, Search, AlertCircle,
+  ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Search, AlertCircle,
 } from 'lucide-react';
 import { formatCLP, formatDate } from '../utils/formatters';
 import InvoiceDetailModal from '../components/InvoiceDetailModal';
@@ -61,7 +61,9 @@ const SortTh = ({ label, colKey, sort, onSort, right = false }) => {
         active ? 'text-violet-600' : 'text-slate-400 group-hover:text-slate-600'
       } transition-colors`}>
         {label}
-        <span className="text-xs">{active ? (sort.dir === 'asc' ? '▲' : '▼') : <span className="opacity-0 group-hover:opacity-40">▼</span>}</span>
+        {active
+          ? (sort.dir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)
+          : <ChevronDown size={12} className="opacity-0 group-hover:opacity-40" />}
       </span>
     </th>
   );
@@ -374,13 +376,13 @@ export default function ControlPanel({ supabase }) {
               </div>
               <div className="flex items-center gap-3">
                 {/* Search */}
-                <div className="relative hidden sm:block">
+                <div className="relative">
                   <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     value={overdueSearch}
                     onChange={e => { setOverdueSearch(e.target.value); setOverduePage(1); }}
                     placeholder="Buscar…"
-                    className="pl-7 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-400/20 w-36 transition-all"
+                    className="pl-7 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-400/20 w-28 sm:w-36 transition-all"
                   />
                 </div>
                 <span className="text-xs text-rose-500 font-semibold bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
@@ -390,7 +392,7 @@ export default function ControlPanel({ supabase }) {
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-rose-50/50 text-xs text-rose-400 uppercase tracking-wider font-semibold">
+                <thead className="bg-rose-50/50 text-xs text-rose-400 uppercase tracking-wider font-semibold sticky top-0">
                   <tr>
                     <th className="px-5 py-3 text-left">Proveedor</th>
                     <th className="px-5 py-3 text-left">Venció</th>

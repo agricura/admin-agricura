@@ -29,6 +29,15 @@ function InvoiceForm({ supabase, onSuccess, invoiceToEdit, onShowConfirm }) {
   });
 
   const [focusField, setFocusField] = useState(null);
+  const [fieldErrors, setFieldErrors] = useState({});
+
+  const validateField = (name, value) => {
+    if (['proveedor', 'folio', 'fecha_emision', 'fecha_venc'].includes(name) && !String(value).trim()) {
+      setFieldErrors(prev => ({ ...prev, [name]: 'Este campo es obligatorio' }));
+    } else {
+      setFieldErrors(prev => { const next = { ...prev }; delete next[name]; return next; });
+    }
+  };
   const [tipoOptions, setTipoOptions] = useState(['Factura', 'Boleta', 'Nota de Crédito', 'Nota de Débito', 'Otro']);
   const [pdfUrl, setPdfUrl] = useState(invoiceToEdit?.document_url || null);
   const [pdfFile, setPdfFile] = useState(null);
@@ -170,7 +179,8 @@ function InvoiceForm({ supabase, onSuccess, invoiceToEdit, onShowConfirm }) {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-2 space-y-1.5">
               <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide px-1">Nombre del Proveedor</label>
-              <input name="proveedor" value={formData.proveedor} onChange={handleGeneralChange} className="w-full bg-slate-50 border border-slate-200 hover:border-slate-300 px-4 py-2.5 rounded-lg font-semibold text-sm focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all outline-none text-slate-900 placeholder:text-slate-400 placeholder:font-normal" placeholder="Nombre de la Empresa o Proveedor" required />
+              <input name="proveedor" value={formData.proveedor} onChange={handleGeneralChange} onBlur={e => validateField('proveedor', e.target.value)} className={`w-full bg-slate-50 border hover:border-slate-300 px-4 py-2.5 rounded-lg font-semibold text-sm focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all outline-none text-slate-900 placeholder:text-slate-400 placeholder:font-normal ${fieldErrors.proveedor ? 'border-rose-400 bg-rose-50/30' : 'border-slate-200'}`} placeholder="Nombre de la Empresa o Proveedor" required />
+              {fieldErrors.proveedor && <p className="text-xs text-rose-500 px-1">{fieldErrors.proveedor}</p>}
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide px-1">Tipo de Documento</label>
@@ -186,7 +196,8 @@ function InvoiceForm({ supabase, onSuccess, invoiceToEdit, onShowConfirm }) {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 lg:gap-5">
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide px-1">Folio / Número</label>
-              <input name="folio" value={formData.folio} onChange={handleGeneralChange} className="w-full bg-slate-50 border border-slate-200 hover:border-slate-300 px-4 py-2.5 rounded-lg font-medium text-sm text-slate-800 outline-none transition-all focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10" placeholder="Ej: 45001" required />
+              <input name="folio" value={formData.folio} onChange={handleGeneralChange} onBlur={e => validateField('folio', e.target.value)} className={`w-full bg-slate-50 border hover:border-slate-300 px-4 py-2.5 rounded-lg font-medium text-sm text-slate-800 outline-none transition-all focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 ${fieldErrors.folio ? 'border-rose-400 bg-rose-50/30' : 'border-slate-200'}`} placeholder="Ej: 45001" required />
+              {fieldErrors.folio && <p className="text-xs text-rose-500 px-1">{fieldErrors.folio}</p>}
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide px-1">RUT Proveedor</label>
@@ -194,11 +205,13 @@ function InvoiceForm({ supabase, onSuccess, invoiceToEdit, onShowConfirm }) {
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide px-1">Fecha Emisión</label>
-              <DateInput value={formData.fecha_emision} onChange={handleGeneralChange} name="fecha_emision" required className="w-full bg-slate-50 border border-slate-200 hover:border-slate-300 px-4 py-2.5 rounded-lg font-medium text-sm text-slate-800 outline-none transition-all focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10" />
+              <DateInput value={formData.fecha_emision} onChange={e => { handleGeneralChange(e); validateField('fecha_emision', e.target.value); }} name="fecha_emision" required className={`w-full bg-slate-50 border hover:border-slate-300 px-4 py-2.5 rounded-lg font-medium text-sm text-slate-800 outline-none transition-all focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 ${fieldErrors.fecha_emision ? 'border-rose-400 bg-rose-50/30' : 'border-slate-200'}`} />
+              {fieldErrors.fecha_emision && <p className="text-xs text-rose-500 px-1">{fieldErrors.fecha_emision}</p>}
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide px-1">Vencimiento</label>
-              <DateInput value={formData.fecha_venc} onChange={handleGeneralChange} name="fecha_venc" required className="w-full bg-slate-50 border border-slate-200 hover:border-slate-300 px-4 py-2.5 rounded-lg font-medium text-sm text-slate-800 outline-none transition-all focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10" />
+              <DateInput value={formData.fecha_venc} onChange={e => { handleGeneralChange(e); validateField('fecha_venc', e.target.value); }} name="fecha_venc" required className={`w-full bg-slate-50 border hover:border-slate-300 px-4 py-2.5 rounded-lg font-medium text-sm text-slate-800 outline-none transition-all focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 ${fieldErrors.fecha_venc ? 'border-rose-400 bg-rose-50/30' : 'border-slate-200'}`} />
+              {fieldErrors.fecha_venc && <p className="text-xs text-rose-500 px-1">{fieldErrors.fecha_venc}</p>}
             </div>
           </div>
         </div>
@@ -249,7 +262,8 @@ function InvoiceForm({ supabase, onSuccess, invoiceToEdit, onShowConfirm }) {
           <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500 rounded-full opacity-10 blur-[80px]"></div>
           <div className="space-y-2 z-10">
             <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide block px-1">Total Neto</label>
-            <input name="total_bruto" type={focusField === 'neto' ? 'number' : 'text'} value={focusField === 'neto' ? formData.total_bruto : formatCLP(formData.total_bruto)} onChange={handleGeneralChange} onFocus={() => setFocusField('neto')} onBlur={() => setFocusField(null)} className={`w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 font-semibold text-lg text-white font-mono outline-none transition-all focus:bg-white/10 focus:ring-2 focus:ring-blue-500/30 ${hasItems ? 'opacity-50 pointer-events-none' : ''}`} required readOnly={hasItems} />
+            <input name="total_bruto" type={focusField === 'neto' ? 'number' : 'text'} value={focusField === 'neto' ? formData.total_bruto : formatCLP(formData.total_bruto)} onChange={handleGeneralChange} onFocus={() => setFocusField('neto')} onBlur={() => setFocusField(null)} className={`w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 font-semibold text-lg text-white font-mono outline-none transition-all focus:bg-white/10 focus:ring-2 focus:ring-blue-500/30 ${hasItems ? 'opacity-50 cursor-not-allowed' : ''}`} required readOnly={hasItems} />
+            {hasItems && <p className="text-xs text-slate-400 px-1">Calculado automáticamente desde los ítems</p>}
           </div>
           <div className="space-y-2 z-10">
             <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide block px-1">IVA (19%)</label>

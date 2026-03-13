@@ -16,12 +16,12 @@ import { useInvoices } from '../context/InvoicesContext';
 const DASH_COL_KEY = 'dashboard_visible_columns';
 
 const ALL_COLUMNS = [
-  { key: 'rut',           label: 'RUT',              type: 'text',   defaultVisible: true  },
+  { key: 'rut',           label: 'RUT',              type: 'text',   defaultVisible: false },
   { key: 'tipo_doc',      label: 'Tipo Doc.',         type: 'text',   defaultVisible: false },
   { key: 'fecha_emision', label: 'Emisión',           type: 'date',   defaultVisible: true  },
   { key: 'fecha_venc',    label: 'Vencimiento',       type: 'date',   defaultVisible: true  },
   { key: 'fecha_pago',    label: 'Fecha Pago',        type: 'date',   defaultVisible: false },
-  { key: 'centro_costo',  label: 'Centro Costo',      type: 'text',   defaultVisible: true  },
+  { key: 'centro_costo',  label: 'Centro Costo',      type: 'text',   defaultVisible: false },
   { key: 'item',          label: 'Categoría',         type: 'text',   defaultVisible: false },
   { key: 'total_bruto',   label: 'Total Neto',        type: 'money',  defaultVisible: false },
   { key: 'iva',           label: 'IVA',               type: 'money',  defaultVisible: false },
@@ -326,7 +326,7 @@ function Dashboard({ supabase, onEdit, onViewDetail, onShowConfirm }) {
               onClick={handleExportCSV}
               disabled={filteredInvoices.length === 0}
               className="flex items-center gap-2 px-3.5 py-2 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:border-emerald-300 hover:text-emerald-700 hover:bg-emerald-50 bg-white transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
-              title="Exportar registros filtrados a Excel"
+              title={filteredInvoices.length === 0 ? 'No hay documentos para exportar' : 'Exportar registros filtrados a Excel'}
             >
               <Download size={15} />
               <span>Exportar Excel</span>
@@ -490,7 +490,7 @@ function Dashboard({ supabase, onEdit, onViewDetail, onShowConfirm }) {
                         })}
                         {/* Acciones */}
                         <td className="px-4 py-2.5">
-                          <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                          <div className="flex items-center justify-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200">
                             <button onClick={() => onViewDetail(inv)} className={`p-1.5 rounded-lg transition-all ${hasItems ? 'text-blue-600 hover:bg-blue-50' : 'text-slate-400 hover:bg-slate-100'}`} title="Ver Detalle">
                               <Search size={16} />
                             </button>

@@ -175,7 +175,7 @@ const InvoiceDetailModal = ({ invoice, onClose, onEdit, supabase }) => {
                   <div className="rounded-xl overflow-hidden border border-slate-200 bg-white">
                     {isImage(docUrl)
                       ? <img src={docUrl} alt="Documento" className="w-full max-h-[500px] object-contain" />
-                      : <iframe src={docUrl} className="w-full h-[500px]" title="Documento PDF" />}
+                      : <iframe src={docUrl} className="w-full min-h-[500px] h-[70vh]" title="Documento PDF" />}
                   </div>
                 )}
               </div>
