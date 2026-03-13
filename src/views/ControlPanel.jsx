@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   LayoutDashboard, CheckCircle, Clock, FileText,
-  TrendingUp, AlertTriangle, BarChart3, Loader2, Calendar, X, ChevronLeft, ChevronRight,
+  TrendingUp, AlertTriangle, BarChart3, Loader2, Calendar, X,
+  ChevronLeft, ChevronRight, Search, AlertCircle,
 } from 'lucide-react';
 import { formatCLP, formatDate } from '../utils/formatters';
 import InvoiceDetailModal from '../components/InvoiceDetailModal';
 import ConfirmModal from '../components/ConfirmModal';
+import PaymentModal from '../components/PaymentModal';
+import { useInvoices } from '../context/InvoicesContext';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const Skeleton = () => (
@@ -64,21 +67,40 @@ const SortTh = ({ label, colKey, sort, onSort, right = false }) => {
   );
 };
 
+
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function ControlPanel({ supabase }) {
-  const [invoices,    setInvoices]    = useState([]);
-  const [siiRecords,  setSiiRecords]  = useState([]);
-  const [loadingInv,  setLoadingInv]  = useState(true);
-  const [loadingSII,  setLoadingSII]  = useState(true);
-  const [weeklyModal,   setWeeklyModal]   = useState(null);
-  const [upcomingPage,  setUpcomingPage]  = useState(1);
-  const [viewingInvoice, setViewingInvoice] = useState(null);
-  const UPCOMING_PAGE_SIZE = 7;
+  // ── Shared invoices from context ──────────────────────────────────────────
+  const { invoices, loading: loadingInv, error: invError, updateInvoice } = useInvoices();
 
-  const [siiTipoSort,  setSiiTipoSort]  = useState({ key: 'total', dir: 'desc' });
-  const [siiMonthSort, setSiiMonthSort] = useState({ key: 'mes',   dir: 'desc' });
-  const [siiMonthModal, setSiiMonthModal] = useState(null); // null | [mes, {neto,total,count,docs}]
-  const [confirm, setConfirm] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+  // ── SII (still fetched locally) ───────────────────────────────────────────
+  const [siiRecords,    setSiiRecords]    = useState([]);
+  const [loadingSII,    setLoadingSII]    = useState(true);
+
+  // ── UI state ──────────────────────────────────────────────────────────────
+  const [weeklyModal,    setWeeklyModal]    = useState(null); // stores bucket label
+  const [upcomingPage,   setUpcomingPage]   = useState(1);
+  const [overduePage,    setOverduePage]    = useState(1);
+  const [viewingInvoice, setViewingInvoice] = useState(null);
+  const [upcomingSearch, setUpcomingSearch] = useState('');
+  const [overdueSearch,  setOverdueSearch]  = useState('');
+  const [paymentModal,   setPaymentModal]   = useState({ isOpen: false, invoiceId: null });
+  const [simpleConfirm,  setSimpleConfirm]  = useState({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+  const [localError,     setLocalError]     = useState(null);
+
+  const UPCOMING_PAGE_SIZE = 8;
+  const OVERDUE_PAGE_SIZE  = 5;
+
+  const [siiTipoSort,   setSiiTipoSort]   = useState({ key: 'total', dir: 'desc' });
+  const [siiMonthSort,  setSiiMonthSort]  = useState({ key: 'mes',   dir: 'desc' });
+  const [siiMonthModal, setSiiMonthModal] = useState(null);
+
+  const fmtMes = (m) => {
+    if (!m) return m;
+    const [year, month] = m.split('-');
+    const names = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    return `${names[parseInt(month, 10) - 1]}-${year}`;
+  };
 
   const fmtSiiDate = (v) => {
     if (!v) return '—';
@@ -87,29 +109,6 @@ export default function ControlPanel({ supabase }) {
 
   const handleTipoSort  = (k) => setSiiTipoSort(s  => ({ key: k, dir: s.key === k && s.dir === 'desc' ? 'asc' : 'desc' }));
   const handleMonthSort = (k) => setSiiMonthSort(s => ({ key: k, dir: s.key === k && s.dir === 'desc' ? 'asc' : 'desc' }));
-
-  const toggleStatus = (id, currentStatus) => {
-    const newStatus = currentStatus === 'PENDIENTE' ? 'PAGADO' : 'PENDIENTE';
-    const newFechaPago = newStatus === 'PAGADO' ? new Date().toISOString() : null;
-    setConfirm({
-      isOpen: true,
-      title: 'Actualizar Estado',
-      message: `¿Cambiar el estado del documento a ${newStatus}?`,
-      onConfirm: async () => {
-        setInvoices(prev => prev.map(inv => inv.id === id ? { ...inv, status_pago: newStatus, fecha_pago: newFechaPago } : inv));
-        setWeeklyModal(prev => {
-          if (!prev) return null;
-          const updatedDocs = prev.docs
-            .map(inv => inv.id === id ? { ...inv, status_pago: newStatus, fecha_pago: newFechaPago } : inv)
-            .filter(inv => inv.status_pago === 'PENDIENTE');
-          const newTotal = updatedDocs.reduce((s, inv) => s + Number(inv.total_a_pagar || 0), 0);
-          return { ...prev, docs: updatedDocs, count: updatedDocs.length, total: newTotal };
-        });
-        const { error } = await supabase.from('invoices').update({ status_pago: newStatus, fecha_pago: newFechaPago }).eq('id', id);
-        if (error) console.error('Error actualizando estado:', error);
-      },
-    });
-  };
 
   useEffect(() => {
     const fetchAll = async (table, setter, setLoading) => {
@@ -124,17 +123,42 @@ export default function ControlPanel({ supabase }) {
       setter(all);
       setLoading(false);
     };
-    fetchAll('invoices',    setInvoices,   setLoadingInv);
     fetchAll('sii_records', setSiiRecords, setLoadingSII);
   }, []);
 
   const todayStr = new Date().toISOString().split('T')[0];
 
+  // ── Toggle status ─────────────────────────────────────────────────────────
+  const handleToggleStatus = (id, currentStatus) => {
+    if (currentStatus === 'PENDIENTE') {
+      setPaymentModal({ isOpen: true, invoiceId: id });
+    } else {
+      setSimpleConfirm({
+        isOpen: true,
+        title: 'Revertir Estado',
+        message: '¿Cambiar el estado del documento a PENDIENTE?',
+        onConfirm: async () => {
+          const { error } = await updateInvoice(id, { status_pago: 'PENDIENTE', fecha_pago: null, cuenta_pago: null });
+          if (error) setLocalError(`Error al actualizar: ${error.message}`);
+        },
+      });
+    }
+  };
+
+  const handlePaymentConfirm = async ({ fecha_pago, cuenta_pago }) => {
+    const { error } = await updateInvoice(paymentModal.invoiceId, {
+      status_pago: 'PAGADO',
+      fecha_pago,
+      cuenta_pago: cuenta_pago || null,
+    });
+    if (error) setLocalError(`Error al actualizar: ${error.message}`);
+  };
+
   // ── Agricura stats ────────────────────────────────────────────────────────
   const agriStats = useMemo(() => {
-    const pendList   = invoices.filter(i => i.status_pago === 'PENDIENTE' && (i.fecha_venc ?? '') >= todayStr);
-    const overdueList= invoices.filter(i => i.status_pago === 'PENDIENTE' && (i.fecha_venc ?? '') <  todayStr);
-    const paidList   = invoices.filter(i => i.status_pago === 'PAGADO');
+    const pendList    = invoices.filter(i => i.status_pago === 'PENDIENTE' && (i.fecha_venc ?? '') >= todayStr);
+    const overdueList = invoices.filter(i => i.status_pago === 'PENDIENTE' && (i.fecha_venc ?? '') <  todayStr);
+    const paidList    = invoices.filter(i => i.status_pago === 'PAGADO');
     const sum = (arr, k) => arr.reduce((s, i) => s + Number(i[k] || 0), 0);
 
     // By tipo_doc
@@ -146,29 +170,32 @@ export default function ControlPanel({ supabase }) {
       byTipo[k].total += Number(inv.total_a_pagar || 0);
     });
 
-    // Upcoming: all pending docs sorted by fecha_venc asc (soonest first)
-    const upcoming = invoices
-      .filter(i => i.status_pago === 'PENDIENTE' && (i.fecha_venc ?? ''))
-      .sort((a, b) => (a.fecha_venc ?? '').localeCompare(b.fecha_venc ?? ''));
+    // Overdue (pending + past due)
+    const overdueItems = overdueList.sort((a, b) => (a.fecha_venc ?? '').localeCompare(b.fecha_venc ?? ''));
+
+    // Upcoming: pending & not yet overdue, sorted soonest first
+    const upcomingItems = pendList.sort((a, b) => (a.fecha_venc ?? '').localeCompare(b.fecha_venc ?? ''));
 
     // Recent 4
     const recent = [...invoices]
       .sort((a, b) => (b.fecha_emision ?? '').localeCompare(a.fecha_emision ?? ''))
       .slice(0, 4);
 
-    // Weekly buckets for pending non-overdue
+    // Weekly buckets
     const addDays = (str, n) => {
       const d = new Date(str); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().split('T')[0];
     };
-    const d7  = addDays(todayStr, 7);
-    const d14 = addDays(todayStr, 14);
-    const d21 = addDays(todayStr, 21);
-    const d28 = addDays(todayStr, 28);
+    const d7   = addDays(todayStr, 7);
+    const d14  = addDays(todayStr, 14);
+    const d21  = addDays(todayStr, 21);
+    const d28  = addDays(todayStr, 28);
+    const d29  = addDays(todayStr, 29);
     const weeklyBuckets = [
-      { label: 'Próximos 7 días',  range: `Hasta ${d7}`,   from: todayStr, to: d7,  count: 0, total: 0, color: 'rose',   docs: [] },
-      { label: '8 – 14 días',      range: `Hasta ${d14}`,  from: d7,       to: d14, count: 0, total: 0, color: 'amber',  docs: [] },
-      { label: '15 – 21 días',     range: `Hasta ${d21}`,  from: d14,      to: d21, count: 0, total: 0, color: 'yellow', docs: [] },
-      { label: '22 – 28 días',     range: `Hasta ${d28}`,  from: d21,      to: d28, count: 0, total: 0, color: 'slate',  docs: [] },
+      { label: 'Próximos 7 días', range: `Hasta ${d7}`,   from: todayStr, to: d7,          count: 0, total: 0, color: 'rose',   docs: [] },
+      { label: '8 – 14 días',     range: `Hasta ${d14}`,  from: d7,       to: d14,         count: 0, total: 0, color: 'amber',  docs: [] },
+      { label: '15 – 21 días',    range: `Hasta ${d21}`,  from: d14,      to: d21,         count: 0, total: 0, color: 'yellow', docs: [] },
+      { label: '22 – 28 días',    range: `Hasta ${d28}`,  from: d21,      to: d28,         count: 0, total: 0, color: 'slate',  docs: [] },
+      { label: 'Más de 28 días',  range: `Desde ${d29}`,  from: d29,      to: '9999-12-31',count: 0, total: 0, color: 'indigo', docs: [] },
     ];
     invoices
       .filter(i => i.status_pago === 'PENDIENTE' && (i.fecha_venc ?? '') >= todayStr)
@@ -186,7 +213,7 @@ export default function ControlPanel({ supabase }) {
       countPending: pendList.length,
       countOverdue: overdueList.length,
       countPaid:    paidList.length,
-      byTipo, upcoming, recent, weeklyBuckets,
+      byTipo, overdueItems, upcomingItems, recent, weeklyBuckets,
     };
   }, [invoices, todayStr]);
 
@@ -196,7 +223,6 @@ export default function ControlPanel({ supabase }) {
     const totalIVA   = siiRecords.reduce((s, r) => s + Number(r.monto_iva_recuperable || 0), 0);
     const totalMonto = siiRecords.reduce((s, r) => s + Number(r.monto_total || 0), 0);
 
-    // By tipo_compra
     const byTipo = {};
     siiRecords.forEach(r => {
       const k = r.tipo_compra?.trim() || 'Sin Tipo';
@@ -206,15 +232,13 @@ export default function ControlPanel({ supabase }) {
       byTipo[k].total += Number(r.monto_total || 0);
     });
 
-    // Recent 5 by date
     const recent = [...siiRecords]
       .sort((a, b) => (b.fecha_docto ?? '').localeCompare(a.fecha_docto ?? ''))
       .slice(0, 5);
 
-    // Monthly totals (last 6 months) based on fecha_docto
     const monthly = {};
     siiRecords.forEach(r => {
-      const d = String(r.fecha_docto ?? '').slice(0, 7).replace('/', '-'); // "yyyy/mm" → "yyyy-mm"
+      const d = String(r.fecha_docto ?? '').slice(0, 7).replace('/', '-');
       if (!d || d.length < 7) return;
       if (!monthly[d]) monthly[d] = { neto: 0, total: 0, count: 0, docs: [] };
       monthly[d].neto  += Number(r.monto_neto  || 0);
@@ -235,7 +259,6 @@ export default function ControlPanel({ supabase }) {
 
   const loading = loadingInv || loadingSII;
 
-  // Map of "rut|folio" → invoice object from Agricura for SII cross-reference
   const invoiceMap = useMemo(() => {
     const m = new Map();
     invoices.forEach(inv => {
@@ -245,10 +268,59 @@ export default function ControlPanel({ supabase }) {
     return m;
   }, [invoices]);
 
+  // Existing accounts for PaymentModal autocomplete
+  const existingAccounts = useMemo(() =>
+    [...new Set(invoices.map(i => i.cuenta_pago).filter(Boolean))].sort(),
+    [invoices]
+  );
+
+  // Filtered + paginated upcoming
+  const filteredUpcoming = useMemo(() => {
+    if (!upcomingSearch.trim()) return agriStats.upcomingItems;
+    const q = upcomingSearch.trim().toLowerCase();
+    return agriStats.upcomingItems.filter(i =>
+      i.proveedor?.toLowerCase().includes(q) || String(i.folio ?? '').toLowerCase().includes(q)
+    );
+  }, [agriStats.upcomingItems, upcomingSearch]);
+
+  const filteredOverdue = useMemo(() => {
+    if (!overdueSearch.trim()) return agriStats.overdueItems;
+    const q = overdueSearch.trim().toLowerCase();
+    return agriStats.overdueItems.filter(i =>
+      i.proveedor?.toLowerCase().includes(q) || String(i.folio ?? '').toLowerCase().includes(q)
+    );
+  }, [agriStats.overdueItems, overdueSearch]);
+
+  const totalUpcomingPages = Math.ceil(filteredUpcoming.length / UPCOMING_PAGE_SIZE);
+  const safeUpcomingPage   = Math.min(upcomingPage, totalUpcomingPages || 1);
+  const upcomingPageSlice  = filteredUpcoming.slice((safeUpcomingPage - 1) * UPCOMING_PAGE_SIZE, safeUpcomingPage * UPCOMING_PAGE_SIZE);
+
+  const totalOverduePages  = Math.ceil(filteredOverdue.length / OVERDUE_PAGE_SIZE);
+  const safeOverduePage    = Math.min(overduePage, totalOverduePages || 1);
+  const overduePageSlice   = filteredOverdue.slice((safeOverduePage - 1) * OVERDUE_PAGE_SIZE, safeOverduePage * OVERDUE_PAGE_SIZE);
+
+  // Derive current weekly modal bucket from live agriStats (always fresh)
+  const weeklyModalBucket = weeklyModal
+    ? agriStats.weeklyBuckets.find(b => b.label === weeklyModal) ?? null
+    : null;
+
+  const displayError = localError || invError;
+
+  // Reusable action button for tables
+  const ActionBtn = ({ inv, stopProp = false }) => (
+    <button
+      onClick={e => { if (stopProp) e.stopPropagation(); handleToggleStatus(inv.id, inv.status_pago); }}
+      className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all"
+      title="Cambiar Estado"
+    >
+      <CheckCircle size={16} />
+    </button>
+  );
+
   return (
     <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      {/* ── Header ──────────────────────────────────────────────────────────── */}
       <header className="px-1 flex items-center justify-between">
         <div>
           <h2 className="text-2xl lg:text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-3">
@@ -264,6 +336,17 @@ export default function ControlPanel({ supabase }) {
         )}
       </header>
 
+      {/* ERROR BANNER */}
+      {displayError && (
+        <div className="flex items-center gap-3 px-4 py-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-sm font-medium">
+          <AlertCircle size={16} className="shrink-0 text-rose-500" />
+          <span className="flex-1">{displayError}</span>
+          <button onClick={() => setLocalError(null)} className="text-rose-400 hover:text-rose-600 transition-colors">
+            <X size={15} />
+          </button>
+        </div>
+      )}
+
       {/* ═══════════════════════════════════════════════════════════════════════
           DATOS AGRICURA
       ════════════════════════════════════════════════════════════════════════ */}
@@ -276,25 +359,118 @@ export default function ControlPanel({ supabase }) {
 
         {/* KPI row */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 lg:gap-4 mb-6">
-          <KpiCard label="Pendiente"   value={agriStats.totalPending} color="amber"   icon={<Clock size={18} />}          loading={loadingInv} />
-          <KpiCard label="Vencido"     value={agriStats.totalOverdue} color="rose"    icon={<AlertTriangle size={18} />}  loading={loadingInv} />
-          <KpiCard label="Pagado"      value={agriStats.totalPaid}    color="emerald" icon={<CheckCircle size={18} />}    loading={loadingInv} />
+          <KpiCard label="Pendiente" value={agriStats.totalPending} color="amber"   icon={<Clock size={18} />}         loading={loadingInv} />
+          <KpiCard label="Vencido"   value={agriStats.totalOverdue} color="rose"    icon={<AlertTriangle size={18} />} loading={loadingInv} />
+          <KpiCard label="Pagado"    value={agriStats.totalPaid}    color="emerald" icon={<CheckCircle size={18} />}   loading={loadingInv} />
         </div>
 
+        {/* ── Documentos Vencidos (full width, only if any) ────────────────── */}
+        {!loadingInv && agriStats.overdueItems.length > 0 && (
+          <div className="mb-5 bg-white border border-rose-200/70 rounded-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-rose-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={15} className="text-rose-500" />
+                <h4 className="text-sm font-bold text-rose-700">Documentos Vencidos</h4>
+              </div>
+              <div className="flex items-center gap-3">
+                {/* Search */}
+                <div className="relative hidden sm:block">
+                  <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    value={overdueSearch}
+                    onChange={e => { setOverdueSearch(e.target.value); setOverduePage(1); }}
+                    placeholder="Buscar…"
+                    className="pl-7 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-400/20 w-36 transition-all"
+                  />
+                </div>
+                <span className="text-xs text-rose-500 font-semibold bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
+                  {agriStats.overdueItems.length} vencida{agriStats.overdueItems.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-rose-50/50 text-xs text-rose-400 uppercase tracking-wider font-semibold">
+                  <tr>
+                    <th className="px-5 py-3 text-left">Proveedor</th>
+                    <th className="px-5 py-3 text-left">Venció</th>
+                    <th className="px-5 py-3 text-left">Centro</th>
+                    <th className="px-5 py-3 text-right">Monto</th>
+                    <th className="px-5 py-3 text-center">Acción</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-rose-50">
+                  {overduePageSlice.map(inv => {
+                    const daysOverdue = inv.fecha_venc
+                      ? Math.abs(Math.ceil((new Date(inv.fecha_venc) - new Date(todayStr)) / 86400000))
+                      : null;
+                    return (
+                      <tr
+                        key={inv.id}
+                        onClick={() => setViewingInvoice(inv)}
+                        className="cursor-pointer bg-rose-50/20 hover:bg-rose-50/50 transition-colors"
+                      >
+                        <td className="px-5 py-3">
+                          <p className="font-semibold text-slate-800 text-xs truncate max-w-[160px]">{inv.proveedor}</p>
+                          <span className="font-mono text-xs text-slate-400">#{inv.folio}</span>
+                        </td>
+                        <td className="px-5 py-3 whitespace-nowrap">
+                          <p className="font-mono text-xs font-semibold text-rose-600">{inv.fecha_venc ? formatDate(inv.fecha_venc) : '—'}</p>
+                          {daysOverdue !== null && (
+                            <p className="text-xs mt-0.5 font-medium text-rose-400">Hace {daysOverdue}d</p>
+                          )}
+                        </td>
+                        <td className="px-5 py-3">
+                          <span className="bg-slate-100 text-slate-600 text-xs px-2 py-0.5 rounded-md border border-slate-200 font-medium">
+                            {inv.centro_costo || 'N/A'}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          <span className="font-mono font-bold text-xs text-rose-600">${formatCLP(inv.total_a_pagar)}</span>
+                        </td>
+                        <td className="px-5 py-3 text-center">
+                          <ActionBtn inv={inv} stopProp />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {totalOverduePages > 1 && (
+              <div className="px-5 py-3 border-t border-rose-100 flex items-center justify-between bg-rose-50/30">
+                <span className="text-xs text-rose-400 font-medium">Pág. {safeOverduePage} de {totalOverduePages}</span>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => setOverduePage(p => Math.max(1, p - 1))} disabled={safeOverduePage === 1} className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-100 disabled:opacity-30 disabled:cursor-not-allowed transition-all"><ChevronLeft size={14} /></button>
+                  <button onClick={() => setOverduePage(p => Math.min(totalOverduePages, p + 1))} disabled={safeOverduePage === totalOverduePages} className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-100 disabled:opacity-30 disabled:cursor-not-allowed transition-all"><ChevronRight size={14} /></button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          {/* Próximos Vencimientos */}
-          {!loadingInv && agriStats.upcoming.length > 0 && (() => {
-            const totalUpcomingPages = Math.ceil(agriStats.upcoming.length / UPCOMING_PAGE_SIZE);
-            const safePage = Math.min(upcomingPage, totalUpcomingPages);
-            const pageSlice = agriStats.upcoming.slice((safePage - 1) * UPCOMING_PAGE_SIZE, safePage * UPCOMING_PAGE_SIZE);
-            return (
+          {/* ── Próximos Vencimientos ────────────────────────────────────────── */}
+          {!loadingInv && (
             <div className="bg-white border border-slate-200/60 rounded-xl overflow-hidden flex flex-col">
-              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between shrink-0 gap-2 flex-wrap">
                 <div className="flex items-center gap-2">
                   <Clock size={15} className="text-amber-500" />
                   <h4 className="text-sm font-bold text-slate-700">Próximos Vencimientos</h4>
                 </div>
-                <span className="text-xs text-slate-400 font-medium">{agriStats.upcoming.length} pendientes en total</span>
+                <div className="flex items-center gap-2">
+                  {/* Search */}
+                  <div className="relative">
+                    <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      value={upcomingSearch}
+                      onChange={e => { setUpcomingSearch(e.target.value); setUpcomingPage(1); }}
+                      placeholder="Buscar…"
+                      className="pl-7 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/20 w-32 transition-all"
+                    />
+                  </div>
+                  <span className="text-xs text-slate-400 font-medium whitespace-nowrap">{agriStats.upcomingItems.length} pendientes</span>
+                </div>
               </div>
               <div className="flex-1 overflow-auto min-h-0">
                 <table className="w-full text-sm">
@@ -308,99 +484,73 @@ export default function ControlPanel({ supabase }) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {pageSlice.map(inv => {
-                      const isOverdue = (inv.fecha_venc ?? '') < todayStr;
-                      const daysLeft = inv.fecha_venc
-                        ? Math.ceil((new Date(inv.fecha_venc) - new Date(todayStr)) / 86400000)
-                        : null;
-                      const isImminent = !isOverdue && daysLeft !== null && daysLeft <= 7;
-                      return (
-                        <tr key={inv.id} onClick={() => setViewingInvoice(inv)} className={`cursor-pointer transition-colors ${
-                          isOverdue ? 'bg-rose-50/30 hover:bg-rose-50/60' :
-                          isImminent ? 'bg-amber-50/30 hover:bg-amber-50/60' :
-                          'hover:bg-blue-50/30'
-                        }`}>
-                          <td className="px-5 py-3">
-                            <p className="font-semibold text-slate-800 text-xs truncate max-w-[140px]">{inv.proveedor}</p>
-                            <span className="font-mono text-xs text-slate-400">#{inv.folio}</span>
-                          </td>
-                          <td className="px-5 py-3 whitespace-nowrap">
-                            <p className={`font-mono text-xs font-semibold ${
-                              isOverdue ? 'text-rose-600' : isImminent ? 'text-amber-600' : 'text-slate-600'
-                            }`}>{inv.fecha_venc ? formatDate(inv.fecha_venc) : '—'}</p>
-                            {daysLeft !== null && (
-                              <p className={`text-xs mt-0.5 font-medium ${
-                                isOverdue ? 'text-rose-400' : isImminent ? 'text-amber-400' : 'text-slate-400'
-                              }`}>
-                                {isOverdue ? `Venció hace ${Math.abs(daysLeft)}d` : daysLeft === 0 ? 'Vence hoy' : `En ${daysLeft}d`}
-                              </p>
-                            )}
-                          </td>
-                          <td className="px-5 py-3">
-                            <span className="bg-slate-100 text-slate-600 text-xs px-2 py-0.5 rounded-md border border-slate-200 font-medium">
-                              {inv.centro_costo || 'N/A'}
-                            </span>
-                          </td>
-                          <td className="px-5 py-3 text-right">
-                            <span className={`font-mono font-bold text-xs ${
-                              isOverdue ? 'text-rose-600' : isImminent ? 'text-amber-600' : 'text-slate-700'
-                            }`}>${formatCLP(inv.total_a_pagar)}</span>
-                          </td>
-                          <td className="px-5 py-3 text-center">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); toggleStatus(inv.id, inv.status_pago); }}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all"
-                              title="Cambiar Estado"
+                    {upcomingPageSlice.length === 0
+                      ? (
+                        <tr><td colSpan={5} className="px-5 py-8 text-center text-xs text-slate-400">Sin resultados</td></tr>
+                      )
+                      : upcomingPageSlice.map(inv => {
+                          const daysLeft = inv.fecha_venc
+                            ? Math.ceil((new Date(inv.fecha_venc) - new Date(todayStr)) / 86400000)
+                            : null;
+                          const isImminent = daysLeft !== null && daysLeft <= 7;
+                          return (
+                            <tr
+                              key={inv.id}
+                              onClick={() => setViewingInvoice(inv)}
+                              className={`cursor-pointer transition-colors ${isImminent ? 'bg-amber-50/30 hover:bg-amber-50/60' : 'hover:bg-blue-50/30'}`}
                             >
-                              <CheckCircle size={16} />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                              <td className="px-5 py-3">
+                                <p className="font-semibold text-slate-800 text-xs truncate max-w-[140px]">{inv.proveedor}</p>
+                                <span className="font-mono text-xs text-slate-400">#{inv.folio}</span>
+                              </td>
+                              <td className="px-5 py-3 whitespace-nowrap">
+                                <p className={`font-mono text-xs font-semibold ${isImminent ? 'text-amber-600' : 'text-slate-600'}`}>
+                                  {inv.fecha_venc ? formatDate(inv.fecha_venc) : '—'}
+                                </p>
+                                {daysLeft !== null && (
+                                  <p className={`text-xs mt-0.5 font-medium ${isImminent ? 'text-amber-400' : 'text-slate-400'}`}>
+                                    {daysLeft === 0 ? 'Vence hoy' : `En ${daysLeft}d`}
+                                  </p>
+                                )}
+                              </td>
+                              <td className="px-5 py-3">
+                                <span className="bg-slate-100 text-slate-600 text-xs px-2 py-0.5 rounded-md border border-slate-200 font-medium">
+                                  {inv.centro_costo || 'N/A'}
+                                </span>
+                              </td>
+                              <td className="px-5 py-3 text-right">
+                                <span className={`font-mono font-bold text-xs ${isImminent ? 'text-amber-600' : 'text-slate-700'}`}>
+                                  ${formatCLP(inv.total_a_pagar)}
+                                </span>
+                              </td>
+                              <td className="px-5 py-3 text-center">
+                                <ActionBtn inv={inv} stopProp />
+                              </td>
+                            </tr>
+                          );
+                        })
+                    }
                   </tbody>
                 </table>
               </div>
-              {/* Pagination */}
               {totalUpcomingPages > 1 && (
                 <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between bg-slate-50/40 shrink-0">
-                  <span className="text-xs text-slate-400 font-medium">
-                    Pág. {safePage} de {totalUpcomingPages}
-                  </span>
+                  <span className="text-xs text-slate-400 font-medium">Pág. {safeUpcomingPage} de {totalUpcomingPages}</span>
                   <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => setUpcomingPage(p => Math.max(1, p - 1))}
-                      disabled={safePage === 1}
-                      className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-                    >
-                      <ChevronLeft size={14} />
-                    </button>
+                    <button onClick={() => setUpcomingPage(p => Math.max(1, p - 1))} disabled={safeUpcomingPage === 1} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"><ChevronLeft size={14} /></button>
                     {Array.from({ length: totalUpcomingPages }, (_, i) => i + 1).map(n => (
-                      <button
-                        key={n}
-                        onClick={() => setUpcomingPage(n)}
-                        className={`w-6 h-6 rounded-md text-xs font-semibold transition-all ${
-                          n === safePage
-                            ? 'bg-blue-600 text-white shadow-sm'
-                            : 'text-slate-500 hover:bg-slate-100'
-                        }`}
+                      <button key={n} onClick={() => setUpcomingPage(n)}
+                        className={`w-6 h-6 rounded-md text-xs font-semibold transition-all ${n === safeUpcomingPage ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'}`}
                       >{n}</button>
                     ))}
-                    <button
-                      onClick={() => setUpcomingPage(p => Math.min(totalUpcomingPages, p + 1))}
-                      disabled={safePage === totalUpcomingPages}
-                      className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-                    >
-                      <ChevronRight size={14} />
-                    </button>
+                    <button onClick={() => setUpcomingPage(p => Math.min(totalUpcomingPages, p + 1))} disabled={safeUpcomingPage === totalUpcomingPages} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"><ChevronRight size={14} /></button>
                   </div>
                 </div>
               )}
             </div>
-            );
-          })()}
+          )}
 
-          {/* RIGHT COLUMN: weekly buckets + últimos documentos */}
+          {/* ── RIGHT COLUMN ──────────────────────────────────────────────── */}
           {!loadingInv && (
             <div className="flex flex-col gap-5">
 
@@ -429,13 +579,14 @@ export default function ControlPanel({ supabase }) {
                           amber:  { badge: 'bg-amber-50 text-amber-600 border-amber-100',   mono: 'text-amber-600',  row: 'hover:bg-amber-50/40'  },
                           yellow: { badge: 'bg-yellow-50 text-yellow-700 border-yellow-100', mono: 'text-yellow-700', row: 'hover:bg-yellow-50/40' },
                           slate:  { badge: 'bg-slate-100 text-slate-600 border-slate-200',   mono: 'text-slate-600',  row: 'hover:bg-slate-50/60'  },
+                          indigo: { badge: 'bg-indigo-50 text-indigo-600 border-indigo-100', mono: 'text-indigo-600', row: 'hover:bg-indigo-50/40' },
                         };
                         const c = colorMap[b.color];
                         const clickable = b.count > 0;
                         return (
                           <tr
                             key={b.label}
-                            onClick={() => clickable && setWeeklyModal(b)}
+                            onClick={() => clickable && setWeeklyModal(b.label)}
                             className={`transition-colors ${c.row} ${clickable ? 'cursor-pointer' : 'cursor-default'}`}
                           >
                             <td className="px-5 py-3">
@@ -503,11 +654,10 @@ export default function ControlPanel({ supabase }) {
           badge={!loadingSII ? `${siiRecords.length} registros` : null}
         />
 
-        {/* KPI row */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 lg:gap-4 mb-6">
-          <KpiCard label="Total Neto"       value={siiStats.totalNeto}  color="violet" icon={<TrendingUp size={18} />} loading={loadingSII} />
-          <KpiCard label="IVA Recuperable"  value={siiStats.totalIVA}   color="indigo" icon={<TrendingUp size={18} />} loading={loadingSII} />
-          <KpiCard label="Total Compras"    value={siiStats.totalMonto} color="slate"  icon={<TrendingUp size={18} />} loading={loadingSII} />
+          <KpiCard label="Total Neto"      value={siiStats.totalNeto}  color="violet" icon={<TrendingUp size={18} />} loading={loadingSII} />
+          <KpiCard label="IVA Recuperable" value={siiStats.totalIVA}   color="indigo" icon={<TrendingUp size={18} />} loading={loadingSII} />
+          <KpiCard label="Total Compras"   value={siiStats.totalMonto} color="slate"  icon={<TrendingUp size={18} />} loading={loadingSII} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -539,9 +689,7 @@ export default function ControlPanel({ supabase }) {
                       })
                       .map(([tipo, v]) => (
                         <tr key={tipo} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-5 py-3">
-                            <span className="bg-violet-50 text-violet-700 text-xs px-2.5 py-1 rounded-lg border border-violet-100 font-medium">{tipo}</span>
-                          </td>
+                          <td className="px-5 py-3"><span className="bg-violet-50 text-violet-700 text-xs px-2.5 py-1 rounded-lg border border-violet-100 font-medium">{tipo}</span></td>
                           <td className="px-5 py-3 text-right text-slate-500 font-medium text-xs">{v.count}</td>
                           <td className="px-5 py-3 text-right font-mono text-slate-600 text-xs">${formatCLP(v.neto)}</td>
                           <td className="px-5 py-3 text-right font-mono text-violet-700 font-semibold text-xs">${formatCLP(v.total)}</td>
@@ -580,13 +728,13 @@ export default function ControlPanel({ supabase }) {
                         return dir === 'asc' ? av - bv : bv - av;
                       })
                       .map(([mes, v]) => (
-                      <tr key={mes} onClick={() => setSiiMonthModal([mes, v])} className="hover:bg-violet-50/30 cursor-pointer transition-colors">
-                        <td className="px-5 py-3 font-medium text-slate-700 text-xs font-mono">{mes}</td>
-                        <td className="px-5 py-3 text-right text-slate-500 font-medium text-xs">{v.count}</td>
-                        <td className="px-5 py-3 text-right font-mono text-slate-600 text-xs">${formatCLP(v.neto)}</td>
-                        <td className="px-5 py-3 text-right font-mono text-violet-700 font-semibold text-xs">${formatCLP(v.total)}</td>
-                      </tr>
-                    ))}
+                        <tr key={mes} onClick={() => setSiiMonthModal([mes, v])} className="hover:bg-violet-50/30 cursor-pointer transition-colors">
+                          <td className="px-5 py-3 font-medium text-slate-700 text-xs font-mono">{fmtMes(mes)}</td>
+                          <td className="px-5 py-3 text-right text-slate-500 font-medium text-xs">{v.count}</td>
+                          <td className="px-5 py-3 text-right font-mono text-slate-600 text-xs">${formatCLP(v.neto)}</td>
+                          <td className="px-5 py-3 text-right font-mono text-violet-700 font-semibold text-xs">${formatCLP(v.total)}</td>
+                        </tr>
+                      ))}
                   </tbody>
                 </table>
               </div>
@@ -595,41 +743,22 @@ export default function ControlPanel({ supabase }) {
         </div>
       </section>
 
-      {/* ── SII Monthly drill-down modal ───────────────────────────────── */}
+      {/* ── SII Monthly drill-down modal ──────────────────────────────────── */}
       {siiMonthModal && (() => {
         const [mes, v] = siiMonthModal;
         return (
-          <div
-            className="fixed inset-0 z-[300] flex items-center justify-center bg-black/30 backdrop-blur-sm p-4 animate-in fade-in"
-            onClick={() => setSiiMonthModal(null)}
-          >
-            <div
-              className="bg-white rounded-2xl shadow-2xl border border-slate-200/60 w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden"
-              onClick={e => e.stopPropagation()}
-            >
-              {/* Header */}
+          <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/30 backdrop-blur-sm p-4 animate-in fade-in" onClick={() => setSiiMonthModal(null)}>
+            <div className="bg-white rounded-2xl shadow-2xl border border-slate-200/60 w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
               <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 bg-violet-50 rounded-xl flex items-center justify-center">
-                    <BarChart3 size={17} className="text-violet-500" />
-                  </div>
+                  <div className="w-9 h-9 bg-violet-50 rounded-xl flex items-center justify-center"><BarChart3 size={17} className="text-violet-500" /></div>
                   <div>
                     <h3 className="text-base font-bold text-slate-900">Documentos SII — {mes}</h3>
-                    <p className="text-xs text-slate-400 font-medium mt-0.5">
-                      {v.count} documento{v.count !== 1 ? 's' : ''} · Total:&nbsp;
-                      <span className="font-semibold text-slate-600">${formatCLP(v.total)}</span>
-                    </p>
+                    <p className="text-xs text-slate-400 font-medium mt-0.5">{v.count} documento{v.count !== 1 ? 's' : ''} · Total:&nbsp;<span className="font-semibold text-slate-600">${formatCLP(v.total)}</span></p>
                   </div>
                 </div>
-                <button
-                  onClick={() => setSiiMonthModal(null)}
-                  className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-400 rounded-lg transition-all active:scale-[0.97]"
-                >
-                  <X size={16} />
-                </button>
+                <button onClick={() => setSiiMonthModal(null)} className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-400 rounded-lg transition-all active:scale-[0.97]"><X size={16} /></button>
               </div>
-
-              {/* Table */}
               <div className="overflow-auto flex-1 min-h-0">
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50/80 text-xs text-slate-400 uppercase tracking-wider font-semibold sticky top-0">
@@ -644,17 +773,13 @@ export default function ControlPanel({ supabase }) {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {v.docs.map((r, idx) => {
-                      const matchKey = `${String(r.rut_proveedor || '').trim()}|${String(r.folio || '').trim()}`;
+                      const matchKey  = `${String(r.rut_proveedor || '').trim()}|${String(r.folio || '').trim()}`;
                       const matchedInv = invoiceMap.get(matchKey);
                       return (
                         <tr key={r.id ?? idx} className="hover:bg-slate-50/50 transition-colors">
                           <td className="px-5 py-3 text-center">
                             {matchedInv
-                              ? <span
-                                  onClick={() => setViewingInvoice(matchedInv)}
-                                  className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 text-xs px-2 py-0.5 rounded-lg border border-emerald-200 font-semibold cursor-pointer hover:bg-emerald-100 hover:border-emerald-300 transition-colors"
-                                  title="Ver detalles en Agricura"
-                                ><CheckCircle size={11} /> Sí</span>
+                              ? <span onClick={() => setViewingInvoice(matchedInv)} className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 text-xs px-2 py-0.5 rounded-lg border border-emerald-200 font-semibold cursor-pointer hover:bg-emerald-100 hover:border-emerald-300 transition-colors"><CheckCircle size={11} /> Sí</span>
                               : <span className="text-slate-300 text-xs font-medium">—</span>
                             }
                           </td>
@@ -669,8 +794,6 @@ export default function ControlPanel({ supabase }) {
                   </tbody>
                 </table>
               </div>
-
-              {/* Footer */}
               <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between shrink-0">
                 <span className="text-xs text-slate-400 font-medium">{v.count} registro{v.count !== 1 ? 's' : ''}</span>
                 <span className="font-mono font-bold text-sm text-slate-800">${formatCLP(v.total)}</span>
@@ -680,38 +803,24 @@ export default function ControlPanel({ supabase }) {
         );
       })()}
 
-      {/* ── Weekly bucket modal ───────────────────────────────────────────── */}
-      {weeklyModal && (
-        <div
-          className="fixed inset-0 z-[300] flex items-center justify-center bg-black/30 backdrop-blur-sm p-4 animate-in fade-in"
-          onClick={() => setWeeklyModal(null)}
-        >
-          <div
-            className="bg-white rounded-2xl shadow-2xl border border-slate-200/60 w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden"
-            onClick={e => e.stopPropagation()}
-          >
+      {/* ── Weekly bucket modal (live data from agriStats) ────────────────── */}
+      {weeklyModalBucket && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/30 backdrop-blur-sm p-4 animate-in fade-in" onClick={() => setWeeklyModal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200/60 w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center">
-                  <Calendar size={17} className="text-blue-500" />
-                </div>
+                <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center"><Calendar size={17} className="text-blue-500" /></div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">{weeklyModal.label}</h3>
+                  <h3 className="text-base font-bold text-slate-900">{weeklyModalBucket.label}</h3>
                   <p className="text-xs text-slate-400 font-medium mt-0.5">
-                    {weeklyModal.count} documento{weeklyModal.count !== 1 ? 's' : ''} · Total:&nbsp;
-                    <span className="font-semibold text-slate-600">${formatCLP(weeklyModal.total)}</span>
+                    {weeklyModalBucket.count} documento{weeklyModalBucket.count !== 1 ? 's' : ''} · Total:&nbsp;
+                    <span className="font-semibold text-slate-600">${formatCLP(weeklyModalBucket.total)}</span>
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => setWeeklyModal(null)}
-                className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-400 rounded-lg transition-all active:scale-[0.97]"
-              >
-                <X size={16} />
-              </button>
+              <button onClick={() => setWeeklyModal(null)} className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-400 rounded-lg transition-all active:scale-[0.97]"><X size={16} /></button>
             </div>
-
             {/* Table */}
             <div className="overflow-y-auto">
               <table className="w-full text-sm">
@@ -725,55 +834,49 @@ export default function ControlPanel({ supabase }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {weeklyModal.docs.map(inv => {
-                    const daysLeft = inv.fecha_venc
-                      ? Math.ceil((new Date(inv.fecha_venc) - new Date(todayStr)) / 86400000)
-                      : null;
-                    const isToday = daysLeft === 0;
-                    return (
-                      <tr key={inv.id} className={`transition-colors ${isToday ? 'bg-rose-50/30 hover:bg-rose-50/50' : 'hover:bg-slate-50/50'}`}>
-                        <td className="px-6 py-3.5">
-                          <p className="font-semibold text-slate-800 text-xs truncate max-w-[180px]">{inv.proveedor}</p>
-                          <span className="font-mono text-xs text-slate-400">#{inv.folio}</span>
-                        </td>
-                        <td className="px-6 py-3.5 whitespace-nowrap">
-                          <p className={`font-mono text-xs font-semibold ${isToday ? 'text-rose-600' : 'text-slate-700'}`}>
-                            {formatDate(inv.fecha_venc)}
-                          </p>
-                          {daysLeft !== null && (
-                            <p className={`text-xs mt-0.5 font-medium ${isToday ? 'text-rose-400' : 'text-slate-400'}`}>
-                              {isToday ? 'Vence hoy' : `En ${daysLeft}d`}
-                            </p>
-                          )}
-                        </td>
-                        <td className="px-6 py-3.5">
-                          <span className="bg-slate-100 text-slate-600 text-xs px-2 py-0.5 rounded-md border border-slate-200 font-medium">
-                            {inv.centro_costo || 'N/A'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-3.5 text-right">
-                          <span className="font-mono font-bold text-xs text-slate-700">${formatCLP(inv.total_a_pagar)}</span>
-                        </td>
-                        <td className="px-6 py-3.5 text-center">
-                          <button
-                            onClick={() => toggleStatus(inv.id, inv.status_pago)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all"
-                            title="Cambiar Estado"
-                          >
-                            <CheckCircle size={16} />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {weeklyModalBucket.docs.length === 0
+                    ? <tr><td colSpan={5} className="px-6 py-8 text-center text-xs text-slate-400">Sin documentos pendientes</td></tr>
+                    : weeklyModalBucket.docs.map(inv => {
+                        const daysLeft = inv.fecha_venc
+                          ? Math.ceil((new Date(inv.fecha_venc) - new Date(todayStr)) / 86400000)
+                          : null;
+                        const isToday = daysLeft === 0;
+                        return (
+                          <tr key={inv.id} className={`transition-colors ${isToday ? 'bg-rose-50/30 hover:bg-rose-50/50' : 'hover:bg-slate-50/50'}`}>
+                            <td className="px-6 py-3.5">
+                              <p className="font-semibold text-slate-800 text-xs truncate max-w-[180px]">{inv.proveedor}</p>
+                              <span className="font-mono text-xs text-slate-400">#{inv.folio}</span>
+                            </td>
+                            <td className="px-6 py-3.5 whitespace-nowrap">
+                              <p className={`font-mono text-xs font-semibold ${isToday ? 'text-rose-600' : 'text-slate-700'}`}>{formatDate(inv.fecha_venc)}</p>
+                              {daysLeft !== null && (
+                                <p className={`text-xs mt-0.5 font-medium ${isToday ? 'text-rose-400' : 'text-slate-400'}`}>
+                                  {isToday ? 'Vence hoy' : `En ${daysLeft}d`}
+                                </p>
+                              )}
+                            </td>
+                            <td className="px-6 py-3.5">
+                              <span className="bg-slate-100 text-slate-600 text-xs px-2 py-0.5 rounded-md border border-slate-200 font-medium">
+                                {inv.centro_costo || 'N/A'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-3.5 text-right">
+                              <span className="font-mono font-bold text-xs text-slate-700">${formatCLP(inv.total_a_pagar)}</span>
+                            </td>
+                            <td className="px-6 py-3.5 text-center">
+                              <ActionBtn inv={inv} />
+                            </td>
+                          </tr>
+                        );
+                      })
+                  }
                 </tbody>
               </table>
             </div>
-
-            {/* Footer total */}
+            {/* Footer */}
             <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between shrink-0">
-              <span className="text-xs text-slate-400 font-medium">{weeklyModal.count} documento{weeklyModal.count !== 1 ? 's' : ''} pendientes</span>
-              <span className="font-mono font-bold text-sm text-slate-800">${formatCLP(weeklyModal.total)}</span>
+              <span className="text-xs text-slate-400 font-medium">{weeklyModalBucket.count} documento{weeklyModalBucket.count !== 1 ? 's' : ''} pendientes</span>
+              <span className="font-mono font-bold text-sm text-slate-800">${formatCLP(weeklyModalBucket.total)}</span>
             </div>
           </div>
         </div>
@@ -788,15 +891,23 @@ export default function ControlPanel({ supabase }) {
         />
       )}
 
-      {/* Confirm modal */}
+      {/* Payment modal */}
+      <PaymentModal
+        isOpen={paymentModal.isOpen}
+        onClose={() => setPaymentModal({ isOpen: false, invoiceId: null })}
+        onConfirm={handlePaymentConfirm}
+        existingAccounts={existingAccounts}
+      />
+
+      {/* Simple confirm (revert to pending) */}
       <ConfirmModal
-        isOpen={confirm.isOpen}
-        onClose={() => setConfirm(c => ({ ...c, isOpen: false }))}
-        onConfirm={confirm.onConfirm}
-        title={confirm.title}
-        message={confirm.message}
+        isOpen={simpleConfirm.isOpen}
+        onClose={() => setSimpleConfirm(c => ({ ...c, isOpen: false }))}
+        onConfirm={simpleConfirm.onConfirm}
+        title={simpleConfirm.title}
+        message={simpleConfirm.message}
         confirmText="Confirmar"
-        type="success"
+        type="info"
       />
 
       {/* Empty state */}

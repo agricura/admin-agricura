@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { LayoutDashboard, Menu, X, LogOut, FileText, Database, BarChart3, Landmark } from 'lucide-react';
 import { loadScript, supabaseUrl, supabaseAnonKey } from './lib/supabase';
 import Auth from './views/Auth';
@@ -10,52 +10,30 @@ import InvoiceDetailModal from './components/InvoiceDetailModal';
 import DataManagement from './views/DataManagement';
 import ControlPanel from './views/ControlPanel';
 import BankView from './views/BankView';
+import { InvoicesProvider, useInvoices } from './context/InvoicesContext';
 
-export default function App() {
-  const [supabaseClient, setSupabaseClient] = useState(null);
-  const [session, setSession] = useState(null);
-  const [currentView, setCurrentView] = useState('controlPanel');
-  const [invoiceToEdit, setInvoiceToEdit] = useState(null);
+// ── Authenticated app shell (can use useInvoices) ────────────────────────────
+function AppContent({ supabaseClient, session }) {
+  const { invoices, refetch } = useInvoices();
+
+  const [currentView,    setCurrentView]    = useState('controlPanel');
+  const [invoiceToEdit,  setInvoiceToEdit]  = useState(null);
   const [viewingInvoice, setViewingInvoice] = useState(null);
-  const [isReady, setIsReady] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {}, type: 'info' });
+  const [isSidebarOpen,  setIsSidebarOpen]  = useState(false);
+  const [confirmModal,   setConfirmModal]   = useState({ isOpen: false, title: '', message: '', onConfirm: () => {}, type: 'info' });
 
-  useEffect(() => {
-    const initApp = async () => {
-      try {
-        await loadScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2');
-        await loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
-        const client = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
-        setSupabaseClient(client);
-        client.auth.getSession().then(({ data: { session } }) => {
-          setSession(session);
-          setIsReady(true);
-        });
-        client.auth.onAuthStateChange((_event, session) => setSession(session));
-      } catch (err) {
-        console.error('Error al cargar dependencias contables:', err);
-      }
-    };
-    initApp();
-  }, []);
+  const todayStr = new Date().toISOString().split('T')[0];
+  const addDays  = (str, n) => { const d = new Date(str); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().split('T')[0]; };
 
-  if (!isReady) return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white gap-5">
-      <div className="w-12 h-12 border-[3px] border-blue-500/30 border-t-blue-400 rounded-full animate-spin"></div>
-      <div className="text-center">
-        <h1 className="text-lg font-bold tracking-[0.2em] uppercase">Agricura</h1>
-        <p className="text-xs text-slate-500 mt-1 font-medium">Cargando sistema...</p>
-      </div>
-    </div>
+  // Badge: pending docs due within 7 days OR already overdue
+  const urgentCount = useMemo(() =>
+    invoices.filter(i =>
+      i.status_pago === 'PENDIENTE' && (i.fecha_venc ?? '') <= addDays(todayStr, 7)
+    ).length,
+    [invoices, todayStr]
   );
 
-  if (!session) return (
-    <Auth
-      supabase={supabaseClient}
-      onShowAlert={(m) => setConfirmModal({ isOpen: true, title: 'Error de Acceso', message: m, type: 'danger', onConfirm: () => {} })}
-    />
-  );
+  const nav = (view) => { setCurrentView(view); setIsSidebarOpen(false); };
 
   return (
     <div className="h-screen bg-slate-50 flex flex-col lg:flex-row font-sans overflow-hidden text-slate-800">
@@ -91,30 +69,40 @@ export default function App() {
         </div>
 
         <nav className="flex-1 px-3 mt-16 lg:mt-3 overflow-y-auto scrollbar-hide py-3 space-y-1">
-
           <div className="px-1 pb-1">
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 px-2.5">Facturas</p>
+
+            {/* Panel de Control — con badge de urgentes */}
             <button
-              onClick={() => { setCurrentView('controlPanel'); setIsSidebarOpen(false); }}
+              onClick={() => nav('controlPanel')}
               className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg transition-all duration-200 text-sm font-medium ${currentView === 'controlPanel' ? 'bg-blue-600 shadow-md shadow-blue-600/20 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
             >
-              <BarChart3 size={18} /><span>Panel de Control</span>
+              <BarChart3 size={18} />
+              <span className="flex-1 text-left">Panel de Control</span>
+              {urgentCount > 0 && (
+                <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center ${
+                  currentView === 'controlPanel' ? 'bg-white/20 text-white' : 'bg-rose-500 text-white'
+                }`}>
+                  {urgentCount > 99 ? '99+' : urgentCount}
+                </span>
+              )}
             </button>
+
             <button
-              onClick={() => { setCurrentView('dashboard'); setIsSidebarOpen(false); }}
+              onClick={() => nav('dashboard')}
               className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg transition-all duration-200 text-sm font-medium ${currentView === 'dashboard' ? 'bg-blue-600 shadow-md shadow-blue-600/20 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
             >
               <LayoutDashboard size={18} /><span>Datos Agricura</span>
             </button>
             <button
-              onClick={() => { setCurrentView('sii'); setIsSidebarOpen(false); }}
+              onClick={() => nav('sii')}
               className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg transition-all duration-200 text-sm font-medium ${currentView === 'sii' ? 'bg-violet-600 shadow-md shadow-violet-600/20 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
             >
               <FileText size={18} /><span>Datos SII</span>
             </button>
             <div className="my-2 mx-2.5 border-t border-white/10" />
             <button
-              onClick={() => { setCurrentView('dataManagement'); setIsSidebarOpen(false); }}
+              onClick={() => nav('dataManagement')}
               className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg transition-all duration-200 text-sm font-medium ${currentView === 'dataManagement' ? 'bg-blue-600 shadow-md shadow-blue-600/20 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
             >
               <Database size={18} /><span>Manejo de Datos</span>
@@ -124,13 +112,12 @@ export default function App() {
           <div className="px-1 pb-1 mt-2">
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 px-2.5">Banco</p>
             <button
-              onClick={() => { setCurrentView('bank'); setIsSidebarOpen(false); }}
+              onClick={() => nav('bank')}
               className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg transition-all duration-200 text-sm font-medium ${currentView === 'bank' ? 'bg-emerald-600 shadow-md shadow-emerald-600/20 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
             >
               <Landmark size={18} /><span>Datos Bancarios</span>
             </button>
           </div>
-
         </nav>
 
         <div className="p-4 bg-slate-950/50 border-t border-white/5 flex flex-col gap-3 shrink-0">
@@ -173,7 +160,7 @@ export default function App() {
             <InvoiceForm
               supabase={supabaseClient}
               invoiceToEdit={invoiceToEdit}
-              onSuccess={() => { setCurrentView('dashboard'); setInvoiceToEdit(null); }}
+              onSuccess={() => { refetch(); setCurrentView('dashboard'); setInvoiceToEdit(null); }}
               onShowConfirm={(cfg) => setConfirmModal({ ...cfg, isOpen: true })}
             />
           )}
@@ -182,7 +169,7 @@ export default function App() {
               supabase={supabaseClient}
               onNewDocument={() => { setInvoiceToEdit(null); setCurrentView('form'); }}
               onShowConfirm={(cfg) => setConfirmModal({ ...cfg, isOpen: true })}
-              onNavigateToPanel={() => setCurrentView('controlPanel')}
+              onNavigateToPanel={() => { refetch(); setCurrentView('controlPanel'); }}
             />
           )}
           {currentView === 'sii' && (
@@ -216,5 +203,51 @@ export default function App() {
         type={confirmModal.type}
       />
     </div>
+  );
+}
+
+// ── Root ─────────────────────────────────────────────────────────────────────
+export default function App() {
+  const [supabaseClient, setSupabaseClient] = useState(null);
+  const [session,        setSession]        = useState(null);
+  const [isReady,        setIsReady]        = useState(false);
+
+  useEffect(() => {
+    const initApp = async () => {
+      try {
+        await loadScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2');
+        await loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
+        const client = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
+        setSupabaseClient(client);
+        client.auth.getSession().then(({ data: { session } }) => {
+          setSession(session);
+          setIsReady(true);
+        });
+        client.auth.onAuthStateChange((_event, session) => setSession(session));
+      } catch (err) {
+        console.error('Error al cargar dependencias contables:', err);
+      }
+    };
+    initApp();
+  }, []);
+
+  if (!isReady) return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white gap-5">
+      <div className="w-12 h-12 border-[3px] border-blue-500/30 border-t-blue-400 rounded-full animate-spin"></div>
+      <div className="text-center">
+        <h1 className="text-lg font-bold tracking-[0.2em] uppercase">Agricura</h1>
+        <p className="text-xs text-slate-500 mt-1 font-medium">Cargando sistema...</p>
+      </div>
+    </div>
+  );
+
+  if (!session) return (
+    <Auth supabase={supabaseClient} />
+  );
+
+  return (
+    <InvoicesProvider supabase={supabaseClient}>
+      <AppContent supabaseClient={supabaseClient} session={session} />
+    </InvoicesProvider>
   );
 }

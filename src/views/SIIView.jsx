@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { FileText, Settings2, Search, RefreshCw, X, ChevronUp, ChevronDown, Eye, EyeOff, Filter, ChevronLeft, ChevronRight, CheckCircle2 } from 'lucide-react';
+import { FileText, Settings2, Search, RefreshCw, X, ChevronUp, ChevronDown, Eye, EyeOff, Filter, ChevronLeft, ChevronRight, CheckCircle2, Download } from 'lucide-react';
 import MultiSelect from '../components/MultiSelect';
 
 const PAGE_SIZE = 20;
@@ -207,6 +207,30 @@ export default function SIIView({ supabase, onShowConfirm, onViewDetail }) {
 
   const clearFilters = () => setFilters(EMPTY_FILTERS);
 
+  // ── Excel Export ──────────────────────────────────────────────────────────
+  const handleExportExcel = () => {
+    const XLSX = window.XLSX;
+    if (!XLSX) { alert('La librería Excel aún no ha cargado. Intenta en un momento.'); return; }
+
+    const data = filtered.map(row => {
+      const obj = {};
+      ALL_COLUMNS.forEach(col => {
+        obj[col.label] = (col.type === 'money')
+          ? (Number(row[col.key]) || 0)
+          : (col.type === 'date')
+            ? fmtDate(row[col.key])
+            : (row[col.key] ?? '');
+      });
+      return obj;
+    });
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'SII');
+    const today = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(wb, `sii_${today}.xlsx`);
+  };
+
   // ── Pagination component ──────────────────────────────────────────────────
   const PaginationBar = ({ position }) => {
     if (totalPages <= 1) return null;
@@ -276,14 +300,6 @@ export default function SIIView({ supabase, onShowConfirm, onViewDetail }) {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => { setShowColPanel(p => !p); setShowFilters(false); }}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg border text-sm font-medium transition-all active:scale-[0.98] ${showColPanel ? 'bg-violet-600 border-violet-600 text-white shadow-sm shadow-violet-600/20' : 'border-slate-200 text-slate-600 hover:border-slate-300 bg-white'}`}
-          >
-            <Settings2 size={15} />
-            <span className="hidden sm:inline">Columnas</span>
-            <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${showColPanel ? 'bg-white/20 text-white' : 'bg-violet-100 text-violet-700'}`}>{visibleCols.length}</span>
-          </button>
           <button onClick={fetchData}
             className="flex items-center gap-2 px-3.5 py-2 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:border-slate-300 bg-white transition-all active:scale-[0.98]">
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
@@ -345,16 +361,37 @@ export default function SIIView({ supabase, onShowConfirm, onViewDetail }) {
       {/* Filtros — inmediatamente sobre la tabla */}
       {(loading || records.length > 0) && (
         <div>
-          <button
-            onClick={() => setShowFilters(p => !p)}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg border text-sm font-medium transition-all active:scale-[0.98] ${showFilters ? 'bg-violet-600 border-violet-600 text-white shadow-sm shadow-violet-600/20' : 'border-slate-200 text-slate-600 hover:border-slate-300 bg-white'}`}
-          >
-            <Filter size={15} />
-            <span>Filtros</span>
-            {activeFilterCount > 0 && (
-              <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${showFilters ? 'bg-white/20 text-white' : 'bg-violet-100 text-violet-700'}`}>{activeFilterCount}</span>
-            )}
-          </button>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <button
+              onClick={() => setShowFilters(p => !p)}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg border text-sm font-medium transition-all active:scale-[0.98] ${showFilters ? 'bg-violet-600 border-violet-600 text-white shadow-sm shadow-violet-600/20' : 'border-slate-200 text-slate-600 hover:border-slate-300 bg-white'}`}
+            >
+              <Filter size={15} />
+              <span>Filtros</span>
+              {activeFilterCount > 0 && (
+                <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${showFilters ? 'bg-white/20 text-white' : 'bg-violet-100 text-violet-700'}`}>{activeFilterCount}</span>
+              )}
+            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => { setShowColPanel(p => !p); setShowFilters(false); }}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-lg border text-sm font-medium transition-all active:scale-[0.98] ${showColPanel ? 'bg-violet-600 border-violet-600 text-white shadow-sm shadow-violet-600/20' : 'border-slate-200 text-slate-600 hover:border-slate-300 bg-white'}`}
+              >
+                <Settings2 size={15} />
+                <span className="hidden sm:inline">Columnas</span>
+                <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${showColPanel ? 'bg-white/20 text-white' : 'bg-violet-100 text-violet-700'}`}>{visibleCols.length}</span>
+              </button>
+              <button
+                onClick={handleExportExcel}
+                disabled={filtered.length === 0}
+                className="flex items-center gap-2 px-3.5 py-2 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:border-emerald-300 hover:text-emerald-700 hover:bg-emerald-50 bg-white transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Exportar registros filtrados a Excel"
+              >
+                <Download size={15} />
+                <span>Exportar Excel</span>
+              </button>
+            </div>
+          </div>
 
           {showFilters && (
             <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm mt-3">
