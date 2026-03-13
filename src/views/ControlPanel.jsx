@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { formatCLP, formatDate } from '../utils/formatters';
 import InvoiceDetailModal from '../components/InvoiceDetailModal';
+import ConfirmModal from '../components/ConfirmModal';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const Skeleton = () => (
@@ -77,6 +78,7 @@ export default function ControlPanel({ supabase }) {
   const [siiTipoSort,  setSiiTipoSort]  = useState({ key: 'total', dir: 'desc' });
   const [siiMonthSort, setSiiMonthSort] = useState({ key: 'mes',   dir: 'desc' });
   const [siiMonthModal, setSiiMonthModal] = useState(null); // null | [mes, {neto,total,count,docs}]
+  const [confirm, setConfirm] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {} });
 
   const fmtSiiDate = (v) => {
     if (!v) return '—';
@@ -85,6 +87,29 @@ export default function ControlPanel({ supabase }) {
 
   const handleTipoSort  = (k) => setSiiTipoSort(s  => ({ key: k, dir: s.key === k && s.dir === 'desc' ? 'asc' : 'desc' }));
   const handleMonthSort = (k) => setSiiMonthSort(s => ({ key: k, dir: s.key === k && s.dir === 'desc' ? 'asc' : 'desc' }));
+
+  const toggleStatus = (id, currentStatus) => {
+    const newStatus = currentStatus === 'PENDIENTE' ? 'PAGADO' : 'PENDIENTE';
+    const newFechaPago = newStatus === 'PAGADO' ? new Date().toISOString() : null;
+    setConfirm({
+      isOpen: true,
+      title: 'Actualizar Estado',
+      message: `¿Cambiar el estado del documento a ${newStatus}?`,
+      onConfirm: async () => {
+        setInvoices(prev => prev.map(inv => inv.id === id ? { ...inv, status_pago: newStatus, fecha_pago: newFechaPago } : inv));
+        setWeeklyModal(prev => {
+          if (!prev) return null;
+          const updatedDocs = prev.docs
+            .map(inv => inv.id === id ? { ...inv, status_pago: newStatus, fecha_pago: newFechaPago } : inv)
+            .filter(inv => inv.status_pago === 'PENDIENTE');
+          const newTotal = updatedDocs.reduce((s, inv) => s + Number(inv.total_a_pagar || 0), 0);
+          return { ...prev, docs: updatedDocs, count: updatedDocs.length, total: newTotal };
+        });
+        const { error } = await supabase.from('invoices').update({ status_pago: newStatus, fecha_pago: newFechaPago }).eq('id', id);
+        if (error) console.error('Error actualizando estado:', error);
+      },
+    });
+  };
 
   useEffect(() => {
     const fetchAll = async (table, setter, setLoading) => {
@@ -279,6 +304,7 @@ export default function ControlPanel({ supabase }) {
                       <th className="px-5 py-3 text-left">Vence</th>
                       <th className="px-5 py-3 text-left">Centro</th>
                       <th className="px-5 py-3 text-right">Monto</th>
+                      <th className="px-5 py-3 text-center">Acción</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -319,6 +345,15 @@ export default function ControlPanel({ supabase }) {
                             <span className={`font-mono font-bold text-xs ${
                               isOverdue ? 'text-rose-600' : isImminent ? 'text-amber-600' : 'text-slate-700'
                             }`}>${formatCLP(inv.total_a_pagar)}</span>
+                          </td>
+                          <td className="px-5 py-3 text-center">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); toggleStatus(inv.id, inv.status_pago); }}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all"
+                              title="Cambiar Estado"
+                            >
+                              <CheckCircle size={16} />
+                            </button>
                           </td>
                         </tr>
                       );
@@ -686,6 +721,7 @@ export default function ControlPanel({ supabase }) {
                     <th className="px-6 py-3 text-left">Vence</th>
                     <th className="px-6 py-3 text-left">Centro</th>
                     <th className="px-6 py-3 text-right">Monto</th>
+                    <th className="px-6 py-3 text-center">Acción</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -718,6 +754,15 @@ export default function ControlPanel({ supabase }) {
                         <td className="px-6 py-3.5 text-right">
                           <span className="font-mono font-bold text-xs text-slate-700">${formatCLP(inv.total_a_pagar)}</span>
                         </td>
+                        <td className="px-6 py-3.5 text-center">
+                          <button
+                            onClick={() => toggleStatus(inv.id, inv.status_pago)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all"
+                            title="Cambiar Estado"
+                          >
+                            <CheckCircle size={16} />
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
@@ -742,6 +787,17 @@ export default function ControlPanel({ supabase }) {
           supabase={supabase}
         />
       )}
+
+      {/* Confirm modal */}
+      <ConfirmModal
+        isOpen={confirm.isOpen}
+        onClose={() => setConfirm(c => ({ ...c, isOpen: false }))}
+        onConfirm={confirm.onConfirm}
+        title={confirm.title}
+        message={confirm.message}
+        confirmText="Confirmar"
+        type="success"
+      />
 
       {/* Empty state */}
       {!loading && invoices.length === 0 && siiRecords.length === 0 && (
