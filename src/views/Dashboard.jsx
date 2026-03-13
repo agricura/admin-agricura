@@ -228,7 +228,7 @@ function Dashboard({ supabase, onEdit, onViewDetail, onShowConfirm }) {
           <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
             <FileText size={20} className="text-blue-600" /> Datos Agricura
           </h2>
-          <p className="text-sm text-slate-400 mt-0.5">
+          <p className="text-sm text-slate-400 mt-1">
             {invoices.length > 0 ? `${invoices.length} documentos cargados` : 'Sin datos cargados aún'}
           </p>
         </div>
@@ -439,7 +439,7 @@ function Dashboard({ supabase, onEdit, onViewDetail, onShowConfirm }) {
                     return (
                       <tr key={inv.id} className={`hover:bg-slate-50/70 transition-colors group ${isOverdue ? 'bg-rose-50/20' : ''}`}>
                         {/* Proveedor / Folio */}
-                        <td className="px-4 py-2.5">
+                        <td className="px-4 py-3">
                           <p className="font-semibold text-slate-900 truncate max-w-[200px] mb-1">{inv.proveedor}</p>
                           <div className="flex items-center gap-2">
                             <span className="font-mono font-medium text-slate-500 text-xs">#{inv.folio}</span>
@@ -450,7 +450,7 @@ function Dashboard({ supabase, onEdit, onViewDetail, onShowConfirm }) {
                         {ALL_COLUMNS.filter(c => visibleCols.includes(c.key)).map(col => {
                           const v = inv[col.key];
                           if (col.key === 'status_pago') return (
-                            <td key={col.key} className="px-4 py-2.5 text-center">
+                            <td key={col.key} className="px-4 py-3 text-center">
                               <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border whitespace-nowrap ${isOverdue ? 'bg-rose-50 text-rose-700 border-rose-200' : v === 'PAGADO' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
                                 <span className={`w-1.5 h-1.5 rounded-full ${isOverdue ? 'bg-rose-500' : v === 'PAGADO' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
                                 {isOverdue ? 'VENCIDA' : (v || '—')}
@@ -458,38 +458,38 @@ function Dashboard({ supabase, onEdit, onViewDetail, onShowConfirm }) {
                             </td>
                           );
                           if (col.key === 'total_a_pagar') return (
-                            <td key={col.key} className="px-4 py-2.5 text-right">
+                            <td key={col.key} className="px-4 py-3 text-right">
                               <span className={`font-bold font-mono text-base tabular-nums ${isOverdue ? 'text-rose-500' : inv.status_pago === 'PAGADO' ? 'text-emerald-600' : Number(v) < 0 ? 'text-rose-500' : 'text-amber-600'}`}>${formatCLP(v)}</span>
                             </td>
                           );
                           if (col.key === 'total_bruto' || col.key === 'iva') return (
-                            <td key={col.key} className="px-4 py-2.5 text-right">
+                            <td key={col.key} className="px-4 py-3 text-right">
                               <span className="font-mono text-sm text-slate-600 tabular-nums">${formatCLP(v)}</span>
                             </td>
                           );
                           if (col.key === 'fecha_venc') return (
-                            <td key={col.key} className={`px-4 py-2.5 font-medium whitespace-nowrap ${isOverdue ? 'text-rose-600' : 'text-slate-600'}`}>
+                            <td key={col.key} className={`px-4 py-3 font-medium whitespace-nowrap ${isOverdue ? 'text-rose-600' : 'text-slate-600'}`}>
                               {v ? formatDate(v) : '—'}
                             </td>
                           );
                           if (col.key === 'centro_costo') return (
-                            <td key={col.key} className="px-4 py-2.5">
+                            <td key={col.key} className="px-4 py-3">
                               <span className="text-slate-600 text-xs font-medium bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200 whitespace-nowrap">{v || 'N/A'}</span>
                             </td>
                           );
                           if (col.key === 'rut') return (
-                            <td key={col.key} className="px-4 py-2.5">
+                            <td key={col.key} className="px-4 py-3">
                               <span className="font-mono text-xs text-slate-600">{v || '—'}</span>
                             </td>
                           );
                           return (
-                            <td key={col.key} className="px-4 py-2.5 text-slate-600 whitespace-nowrap">
+                            <td key={col.key} className="px-4 py-3 text-slate-600 whitespace-nowrap">
                               {v !== null && v !== undefined && v !== '' ? (col.type === 'date' ? formatDate(String(v)) : String(v)) : '—'}
                             </td>
                           );
                         })}
                         {/* Acciones */}
-                        <td className="px-4 py-2.5">
+                        <td className="px-4 py-3">
                           <div className="flex items-center justify-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200">
                             <button onClick={() => onViewDetail(inv)} className={`p-1.5 rounded-lg transition-all ${hasItems ? 'text-blue-600 hover:bg-blue-50' : 'text-slate-400 hover:bg-slate-100'}`} title="Ver Detalle">
                               <Search size={16} />

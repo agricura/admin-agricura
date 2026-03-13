@@ -373,8 +373,8 @@ export default function BankView({ supabase }) {
           {selectedAccount && (
             <>
               {/* Summary cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="bg-white border border-slate-200 rounded-2xl p-5">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 lg:gap-4">
+                <div className="bg-white border border-slate-200 rounded-2xl p-4 lg:p-5">
                   <div className="flex items-center gap-2 mb-3">
                     <CreditCard size={16} className="text-slate-400" />
                     <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Cuenta</p>
@@ -385,7 +385,7 @@ export default function BankView({ supabase }) {
                   </p>
                 </div>
 
-                <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-5">
+                <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 lg:p-5">
                   <div className="flex items-center gap-2 mb-3">
                     <TrendingUp size={16} className="text-emerald-500" />
                     <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wider">Ingresos{isFiltered ? ' (filtrado)' : ''}</p>
@@ -396,7 +396,7 @@ export default function BankView({ supabase }) {
                   </p>
                 </div>
 
-                <div className="bg-rose-50 border border-rose-100 rounded-2xl p-5">
+                <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4 lg:p-5">
                   <div className="flex items-center gap-2 mb-3">
                     <TrendingDown size={16} className="text-rose-500" />
                     <p className="text-xs font-semibold text-rose-600 uppercase tracking-wider">Egresos{isFiltered ? ' (filtrado)' : ''}</p>
@@ -519,7 +519,7 @@ export default function BankView({ supabase }) {
                             const align = col.type === 'money' ? 'text-right' : col.type === 'tag' ? 'text-center' : 'text-left';
                             return (
                               <th key={col.key} onClick={() => handleSort(col.key)}
-                                className={`${align} px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider cursor-pointer hover:text-slate-700 whitespace-nowrap select-none`}>
+                                className={`${align} px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider cursor-pointer hover:text-slate-700 whitespace-nowrap select-none`}>
                                 <div className={`flex items-center gap-1 ${col.type === 'money' ? 'justify-end' : col.type === 'tag' ? 'justify-center' : ''}`}>
                                   {col.label}
                                   {sortKey === col.key
@@ -536,10 +536,10 @@ export default function BankView({ supabase }) {
                           const isCredit = mov.amount > 0;
                           return (
                             <tr key={mov.id} className="hover:bg-slate-50/60 transition-colors">
-                              <td className="px-5 py-3.5 text-slate-500 font-medium whitespace-nowrap">
+                              <td className="px-4 py-3 text-slate-500 font-medium whitespace-nowrap">
                                 {mov.date ? formatDate(mov.date) : '—'}
                               </td>
-                              <td className="px-5 py-3.5 text-slate-700 font-medium max-w-xs">
+                              <td className="px-4 py-3 text-slate-700 font-medium max-w-xs">
                                 <p className="truncate">{mov.description ?? '—'}</p>
                                 {(mov.sender_name || mov.recipient_name) && (
                                   <p className="text-xs text-slate-400 truncate mt-0.5">
@@ -547,12 +547,12 @@ export default function BankView({ supabase }) {
                                   </p>
                                 )}
                               </td>
-                              <td className={`px-5 py-3.5 text-right font-bold tabular-nums whitespace-nowrap ${
+                              <td className={`px-4 py-3 text-right font-bold tabular-nums whitespace-nowrap ${
                                 isCredit ? 'text-emerald-600' : 'text-rose-600'
                               }`}>
                                 {isCredit ? '+' : ''}{formatCLP(mov.amount)}
                               </td>
-                              <td className="px-5 py-3.5 text-center">
+                              <td className="px-4 py-3 text-center">
                                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
                                   isCredit ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
                                 }`}>

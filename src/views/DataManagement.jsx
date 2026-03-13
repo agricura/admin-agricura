@@ -91,7 +91,7 @@ export default function DataManagement({ supabase, onNewDocument, onShowConfirm,
       </header>
 
       {/* Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-3xl">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 max-w-3xl">
 
         {/* Card: Importar Datos */}
         <button

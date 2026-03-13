@@ -58,7 +58,7 @@ const PaymentModal = ({ isOpen, onClose, onConfirm, count = 1, existingAccounts 
             <DateInput
               value={fechaPago}
               onChange={e => setFechaPago(e.target.value)}
-              className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium text-slate-800 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 transition-all"
+              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium text-slate-800 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 transition-all"
             />
           </div>
           <div>
@@ -71,7 +71,7 @@ const PaymentModal = ({ isOpen, onClose, onConfirm, count = 1, existingAccounts 
               value={cuentaPago}
               onChange={e => setCuentaPago(e.target.value)}
               placeholder="Ej: Banco Estado, BCI, Efectivo…"
-              className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium text-slate-800 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 transition-all"
+              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium text-slate-800 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 transition-all"
             />
             {existingAccounts.length > 0 && (
               <datalist id="pay-accounts-datalist">

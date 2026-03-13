@@ -320,7 +320,7 @@ export default function ControlPanel({ supabase }) {
   );
 
   return (
-    <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
       {/* ── Header ──────────────────────────────────────────────────────────── */}
       <header className="px-1 flex items-center justify-between">
@@ -394,11 +394,11 @@ export default function ControlPanel({ supabase }) {
               <table className="w-full text-sm">
                 <thead className="bg-rose-50/50 text-xs text-rose-400 uppercase tracking-wider font-semibold sticky top-0">
                   <tr>
-                    <th className="px-5 py-3 text-left">Proveedor</th>
-                    <th className="px-5 py-3 text-left">Venció</th>
-                    <th className="px-5 py-3 text-left">Centro</th>
-                    <th className="px-5 py-3 text-right">Monto</th>
-                    <th className="px-5 py-3 text-center">Acción</th>
+                    <th className="px-4 py-3 text-left">Proveedor</th>
+                    <th className="px-4 py-3 text-left">Venció</th>
+                    <th className="px-4 py-3 text-left">Centro</th>
+                    <th className="px-4 py-3 text-right">Monto</th>
+                    <th className="px-4 py-3 text-center">Acción</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-rose-50">
@@ -412,25 +412,25 @@ export default function ControlPanel({ supabase }) {
                         onClick={() => setViewingInvoice(inv)}
                         className="cursor-pointer bg-rose-50/20 hover:bg-rose-50/50 transition-colors"
                       >
-                        <td className="px-5 py-3">
+                        <td className="px-4 py-3">
                           <p className="font-semibold text-slate-800 text-xs truncate max-w-[160px]">{inv.proveedor}</p>
                           <span className="font-mono text-xs text-slate-400">#{inv.folio}</span>
                         </td>
-                        <td className="px-5 py-3 whitespace-nowrap">
+                        <td className="px-4 py-3 whitespace-nowrap">
                           <p className="font-mono text-xs font-semibold text-rose-600">{inv.fecha_venc ? formatDate(inv.fecha_venc) : '—'}</p>
                           {daysOverdue !== null && (
                             <p className="text-xs mt-0.5 font-medium text-rose-400">Hace {daysOverdue}d</p>
                           )}
                         </td>
-                        <td className="px-5 py-3">
+                        <td className="px-4 py-3">
                           <span className="bg-slate-100 text-slate-600 text-xs px-2 py-0.5 rounded-md border border-slate-200 font-medium">
                             {inv.centro_costo || 'N/A'}
                           </span>
                         </td>
-                        <td className="px-5 py-3 text-right">
+                        <td className="px-4 py-3 text-right">
                           <span className="font-mono font-bold text-xs text-rose-600">${formatCLP(inv.total_a_pagar)}</span>
                         </td>
-                        <td className="px-5 py-3 text-center">
+                        <td className="px-4 py-3 text-center">
                           <ActionBtn inv={inv} stopProp />
                         </td>
                       </tr>
@@ -478,17 +478,17 @@ export default function ControlPanel({ supabase }) {
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50/60 text-xs text-slate-400 uppercase tracking-wider font-semibold sticky top-0">
                     <tr>
-                      <th className="px-5 py-3 text-left">Proveedor</th>
-                      <th className="px-5 py-3 text-left">Vence</th>
-                      <th className="px-5 py-3 text-left">Centro</th>
-                      <th className="px-5 py-3 text-right">Monto</th>
-                      <th className="px-5 py-3 text-center">Acción</th>
+                      <th className="px-4 py-3 text-left">Proveedor</th>
+                      <th className="px-4 py-3 text-left">Vence</th>
+                      <th className="px-4 py-3 text-left">Centro</th>
+                      <th className="px-4 py-3 text-right">Monto</th>
+                      <th className="px-4 py-3 text-center">Acción</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {upcomingPageSlice.length === 0
                       ? (
-                        <tr><td colSpan={5} className="px-5 py-8 text-center text-xs text-slate-400">Sin resultados</td></tr>
+                        <tr><td colSpan={5} className="px-4 py-8 text-center text-xs text-slate-400">Sin resultados</td></tr>
                       )
                       : upcomingPageSlice.map(inv => {
                           const daysLeft = inv.fecha_venc
@@ -501,11 +501,11 @@ export default function ControlPanel({ supabase }) {
                               onClick={() => setViewingInvoice(inv)}
                               className={`cursor-pointer transition-colors ${isImminent ? 'bg-amber-50/30 hover:bg-amber-50/60' : 'hover:bg-blue-50/30'}`}
                             >
-                              <td className="px-5 py-3">
+                              <td className="px-4 py-3">
                                 <p className="font-semibold text-slate-800 text-xs truncate max-w-[140px]">{inv.proveedor}</p>
                                 <span className="font-mono text-xs text-slate-400">#{inv.folio}</span>
                               </td>
-                              <td className="px-5 py-3 whitespace-nowrap">
+                              <td className="px-4 py-3 whitespace-nowrap">
                                 <p className={`font-mono text-xs font-semibold ${isImminent ? 'text-amber-600' : 'text-slate-600'}`}>
                                   {inv.fecha_venc ? formatDate(inv.fecha_venc) : '—'}
                                 </p>
@@ -515,17 +515,17 @@ export default function ControlPanel({ supabase }) {
                                   </p>
                                 )}
                               </td>
-                              <td className="px-5 py-3">
+                              <td className="px-4 py-3">
                                 <span className="bg-slate-100 text-slate-600 text-xs px-2 py-0.5 rounded-md border border-slate-200 font-medium">
                                   {inv.centro_costo || 'N/A'}
                                 </span>
                               </td>
-                              <td className="px-5 py-3 text-right">
+                              <td className="px-4 py-3 text-right">
                                 <span className={`font-mono font-bold text-xs ${isImminent ? 'text-amber-600' : 'text-slate-700'}`}>
                                   ${formatCLP(inv.total_a_pagar)}
                                 </span>
                               </td>
-                              <td className="px-5 py-3 text-center">
+                              <td className="px-4 py-3 text-center">
                                 <ActionBtn inv={inv} stopProp />
                               </td>
                             </tr>

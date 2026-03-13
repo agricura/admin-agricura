@@ -288,14 +288,14 @@ export default function SIIView({ supabase, onShowConfirm, onViewDetail }) {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <div className="flex-1">
           <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
             <FileText size={20} className="text-violet-600" /> Datos SII
           </h2>
-          <p className="text-sm text-slate-400 mt-0.5">
+          <p className="text-sm text-slate-400 mt-1">
             {records.length > 0 ? `${records.length} registros importados` : 'Sin datos importados aún'}
           </p>
         </div>

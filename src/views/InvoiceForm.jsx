@@ -168,7 +168,7 @@ function InvoiceForm({ supabase, onSuccess, invoiceToEdit, onShowConfirm }) {
         <button onClick={onSuccess} className="p-2 bg-white rounded-lg border border-slate-200 hover:bg-slate-50 transition-all active:scale-[0.98] text-slate-500"><ChevronLeft size={18} /></button>
         <div>
           <h2 className="text-2xl lg:text-3xl font-bold text-slate-900 tracking-tight">{invoiceToEdit ? 'Editar Registro' : 'Nuevo Documento'}</h2>
-          <p className="text-slate-500 text-sm font-medium mt-0.5">Gestión y desglose contable</p>
+          <p className="text-slate-500 text-sm font-medium mt-1">Gestión y desglose contable</p>
         </div>
       </header>
 
