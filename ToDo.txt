@@ -1,0 +1,3 @@
+* Lectura con AI de facturas
+* modulo de remuneraciones
+
