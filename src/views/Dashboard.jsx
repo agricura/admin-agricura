@@ -3,13 +3,15 @@ import {
   CheckCircle, Clock, FileText, Wallet, Search,
   ChevronLeft, ChevronRight, Trash2, Pencil,
   Settings2, ChevronUp, ChevronDown,
-  Eye, EyeOff, X, Download, AlertCircle, Filter,
+  Eye, EyeOff, X, Download, AlertCircle, AlertTriangle, Filter,
 } from 'lucide-react';
 import MultiSelect from '../components/MultiSelect';
+import Pagination from '../components/Pagination';
 import DateInput from '../components/DateInput';
 import MobileActionMenu from '../components/MobileActionMenu';
 import PaymentModal from '../components/PaymentModal';
 import ConfirmModal from '../components/ConfirmModal';
+import { useToast } from '../context/ToastContext';
 import { formatCLP, formatDate } from '../utils/formatters';
 import { useInvoices } from '../context/InvoicesContext';
 
@@ -44,6 +46,7 @@ const SkeletonRow = ({ cols }) => (
 function Dashboard({ supabase, onEdit, onViewDetail, onShowConfirm }) {
   // ── Shared invoices state via context ──────────────────────────────────────
   const { invoices, loading, error: ctxError, updateInvoice, deleteInvoice } = useInvoices();
+  const { toast } = useToast();
 
   // ── UI state ──────────────────────────────────────────────────────────────
   const [localError,     setLocalError]     = useState(null);
@@ -98,7 +101,8 @@ function Dashboard({ supabase, onEdit, onViewDetail, onShowConfirm }) {
         message: '¿Cambiar el estado del documento a PENDIENTE?',
         onConfirm: async () => {
           const { error } = await updateInvoice(id, { status_pago: 'PENDIENTE', fecha_pago: null, cuenta_pago: null });
-          if (error) setLocalError(`Error al actualizar: ${error.message}`);
+          if (error) toast({ type: 'error', message: `Error al actualizar: ${error.message}` });
+          else toast({ type: 'success', message: 'Estado revertido a PENDIENTE' });
         },
       });
     }
@@ -110,13 +114,14 @@ function Dashboard({ supabase, onEdit, onViewDetail, onShowConfirm }) {
     const updates = { status_pago: 'PAGADO', fecha_pago, cuenta_pago: cuenta_pago || null };
     const results = await Promise.all(ids.map(id => updateInvoice(id, updates)));
     const failed = results.filter(r => r.error);
-    if (failed.length > 0) setLocalError(`Error al actualizar ${failed.length} documento(s).`);
+    if (failed.length > 0) toast({ type: 'error', message: `Error al actualizar ${failed.length} documento(s).` });
+    else toast({ type: 'success', message: `${ids.length} documento${ids.length > 1 ? 's' : ''} marcado${ids.length > 1 ? 's' : ''} como PAGADO` });
   };
 
   // ── Excel Export (.xlsx) ──────────────────────────────────────────────────
   const handleExportCSV = () => {
     const XLSX = window.XLSX;
-    if (!XLSX) { alert('La librería Excel aún no ha cargado. Intenta en un momento.'); return; }
+    if (!XLSX) { toast({ type: 'error', message: 'La librería Excel aún no ha cargado. Intenta en un momento.' }); return; }
 
     const data = filteredInvoices.map(inv => ({
       Folio:          inv.folio          ?? '',
@@ -200,13 +205,6 @@ function Dashboard({ supabase, onEdit, onViewDetail, onShowConfirm }) {
     filters.endDate !== '',
   ].filter(Boolean).length;
 
-  // ── Pagination pages array (for numbered buttons) ─────────────────────────
-  const paginationPages = useMemo(() => {
-    if (totalPages <= 1) return [];
-    return Array.from({ length: totalPages }, (_, i) => i + 1)
-      .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
-      .reduce((acc, p, idx, arr) => { if (idx > 0 && p - arr[idx - 1] > 1) acc.push('…'); acc.push(p); return acc; }, []);
-  }, [totalPages, currentPage]);
 
   return (
     <div className="space-y-6 flex flex-col min-h-full">
@@ -372,29 +370,7 @@ function Dashboard({ supabase, onEdit, onViewDetail, onShowConfirm }) {
           <span className="text-xs font-medium text-slate-500">
             {loading ? 'Cargando...' : `${filteredInvoices.length} documento${filteredInvoices.length !== 1 ? 's' : ''}${filteredInvoices.length !== invoices.length ? ' (filtrado)' : ''}${!loading && totalPages > 1 ? ` — pág. ${currentPage}/${totalPages}` : ''}`}
           </span>
-          <div className="flex items-center gap-1">
-            {/* Numbered pagination (top) */}
-            {!loading && totalPages > 1 && (
-              <>
-                <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
-                  className="px-2.5 py-1 rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-all">
-                  Anterior
-                </button>
-                {paginationPages.map((p, i) =>
-                  p === '…'
-                    ? <span key={`e${i}`} className="px-1 text-slate-300 text-xs">…</span>
-                    : <button key={p} onClick={() => setCurrentPage(p)}
-                        className={`w-7 h-7 rounded-lg text-xs font-semibold transition-all ${currentPage === p ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'}`}>
-                        {p}
-                      </button>
-                )}
-                <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}
-                  className="px-2.5 py-1 rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-all">
-                  Siguiente
-                </button>
-              </>
-            )}
-          </div>
+          <Pagination page={currentPage} totalPages={totalPages} totalItems={filteredInvoices.length} pageSize={itemsPerPage} onPageChange={setCurrentPage} color="blue" position="top" />
         </div>
 
         {/* Vista Escritorio */}
@@ -452,7 +428,7 @@ function Dashboard({ supabase, onEdit, onViewDetail, onShowConfirm }) {
                           if (col.key === 'status_pago') return (
                             <td key={col.key} className="px-4 py-3 text-center">
                               <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border whitespace-nowrap ${isOverdue ? 'bg-rose-50 text-rose-700 border-rose-200' : v === 'PAGADO' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                                <span className={`w-1.5 h-1.5 rounded-full ${isOverdue ? 'bg-rose-500' : v === 'PAGADO' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                                {isOverdue ? <AlertTriangle size={12} /> : v === 'PAGADO' ? <CheckCircle size={12} /> : <Clock size={12} />}
                                 {isOverdue ? 'VENCIDA' : (v || '—')}
                               </span>
                             </td>
@@ -500,7 +476,7 @@ function Dashboard({ supabase, onEdit, onViewDetail, onShowConfirm }) {
                             <button onClick={() => onEdit(inv)} className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all" title="Editar">
                               <Pencil size={16} />
                             </button>
-                            <button onClick={() => onShowConfirm({ title: 'Eliminar Documento', message: '¿Confirmas la eliminación permanente?', type: 'danger', onConfirm: async () => { const { error } = await deleteInvoice(inv.id); if (error) setLocalError(`Error al eliminar: ${error.message}`); } })} className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all" title="Eliminar">
+                            <button onClick={() => onShowConfirm({ title: 'Eliminar Documento', message: '¿Confirmas la eliminación permanente?', type: 'danger', onConfirm: async () => { const { error } = await deleteInvoice(inv.id); if (error) toast({ type: 'error', message: `Error al eliminar: ${error.message}` }); else toast({ type: 'success', message: 'Documento eliminado' }); }})} className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all" title="Eliminar">
                               <Trash2 size={16} />
                             </button>
                           </div>
@@ -532,7 +508,9 @@ function Dashboard({ supabase, onEdit, onViewDetail, onShowConfirm }) {
                   <div key={inv.id} className={`p-4 flex items-center justify-between gap-3 active:bg-slate-50 transition-colors ${isOverdue ? 'bg-rose-50/20' : ''}`}>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <div className={`w-2 h-2 rounded-full shrink-0 ${isOverdue ? 'bg-rose-500 animate-pulse' : inv.status_pago === 'PAGADO' ? 'bg-emerald-500' : 'bg-amber-400'}`}></div>
+                        <span className={`shrink-0 ${isOverdue ? 'text-rose-500' : inv.status_pago === 'PAGADO' ? 'text-emerald-500' : 'text-amber-500'}`}>
+                          {isOverdue ? <AlertTriangle size={12} /> : inv.status_pago === 'PAGADO' ? <CheckCircle size={12} /> : <Clock size={12} />}
+                        </span>
                         <h4 className="font-bold text-slate-900 text-sm truncate">{displayProvider}</h4>
                       </div>
                       <div className="flex items-center gap-2 mt-1">
@@ -550,7 +528,7 @@ function Dashboard({ supabase, onEdit, onViewDetail, onShowConfirm }) {
                         onEdit={onEdit}
                         onView={onViewDetail}
                         onToggleStatus={handleToggleStatus}
-                        onDelete={() => onShowConfirm({ title: 'Eliminar Registro', message: '¿Eliminar este registro?', type: 'danger', onConfirm: async () => { const { error } = await deleteInvoice(inv.id); if (error) setLocalError(`Error al eliminar: ${error.message}`); } })}
+                        onDelete={() => onShowConfirm({ title: 'Eliminar Registro', message: '¿Eliminar este registro?', type: 'danger', onConfirm: async () => { const { error } = await deleteInvoice(inv.id); if (error) toast({ type: 'error', message: `Error al eliminar: ${error.message}` }); else toast({ type: 'success', message: 'Documento eliminado' }); }})}
                       />
                     </div>
                   </div>
@@ -560,23 +538,7 @@ function Dashboard({ supabase, onEdit, onViewDetail, onShowConfirm }) {
         </div>
 
         {/* PAGINACIÓN */}
-        {!loading && totalPages > 1 && (
-          <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between gap-2">
-            <span className="text-xs text-slate-400">
-              Mostrando {(currentPage - 1) * itemsPerPage + 1}–{Math.min(currentPage * itemsPerPage, filteredInvoices.length)} de {filteredInvoices.length}
-            </span>
-            <div className="flex items-center gap-1">
-              <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 border border-slate-200 disabled:opacity-30 disabled:pointer-events-none transition-all">
-                <ChevronLeft size={13} /> Anterior
-              </button>
-              <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 border border-slate-200 disabled:opacity-30 disabled:pointer-events-none transition-all">
-                Siguiente <ChevronRight size={13} />
-              </button>
-            </div>
-          </div>
-        )}
+        <Pagination page={currentPage} totalPages={totalPages} totalItems={filteredInvoices.length} pageSize={itemsPerPage} onPageChange={setCurrentPage} color="blue" position="bottom" />
       </div>
 
       {/* PAYMENT MODAL */}

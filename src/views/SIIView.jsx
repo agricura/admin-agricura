@@ -1,6 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { FileText, Settings2, Search, RefreshCw, X, ChevronUp, ChevronDown, Eye, EyeOff, Filter, ChevronLeft, ChevronRight, CheckCircle2, Download } from 'lucide-react';
 import MultiSelect from '../components/MultiSelect';
+import Pagination from '../components/Pagination';
+import EmptyState from '../components/EmptyState';
+import { formatDate, parseDate, toISODate } from '../utils/formatters';
+import { useToast } from '../context/ToastContext';
 
 const PAGE_SIZE = 20;
 
@@ -33,47 +37,23 @@ const ALL_COLUMNS = [
 
 const STORAGE_KEY = 'sii_visible_columns';
 
-// ── Date helpers ──────────────────────────────────────────────────────────────
-// Handles: Excel serial ints, JS Date objects, "dd-mm-yy", "dd-mm-yyyy", "yyyy/mm/dd"
-const parseDate = (v) => {
-  if (!v && v !== 0) return null;
-  if (v instanceof Date) return isNaN(v) ? null : v;
-  if (typeof v === 'number') {
-    const d = new Date((v - 25569) * 86400000);
-    return isNaN(d) ? null : d;
-  }
-  const s = String(v).trim();
-  const m1 = s.match(/^(\d{1,2})-(\d{1,2})-(\d{2,4})$/);
-  if (m1) {
-    let [, dd, mm, yy] = m1;
-    if (yy.length === 2) yy = parseInt(yy) < 50 ? `20${yy}` : `19${yy}`;
-    return new Date(`${yy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}T00:00:00`);
-  }
-  const m2 = s.match(/^(\d{4})[\/\-](\d{2})[\/\-](\d{2})$/);
-  if (m2) return new Date(`${m2[1]}-${m2[2]}-${m2[3]}T00:00:00`);
-  return null;
+// Mapa código → nombre de tipo de documento SII (defaults)
+const DEFAULT_TIPO_DOC_MAP = {
+  33: 'Factura',
+  34: 'Factura no Afecta o Exenta',
+  56: 'Nota Debito',
+  61: 'Nota Credito',
+};
+const TIPO_DOC_STORAGE_KEY = 'sii_tipo_doc_map';
+const loadTipoDocMap = () => {
+  try {
+    const saved = localStorage.getItem(TIPO_DOC_STORAGE_KEY);
+    if (saved) return { ...DEFAULT_TIPO_DOC_MAP, ...JSON.parse(saved) };
+  } catch {}
+  return { ...DEFAULT_TIPO_DOC_MAP };
 };
 
-const SII_MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-const fmtDate = (v) => {
-  const d = parseDate(v);
-  if (!d || isNaN(d)) return v ? String(v) : '—';
-  const day = String(d.getDate()).padStart(2, '0');
-  const mes = SII_MESES[d.getMonth()];
-  const y = d.getFullYear();
-  return `${day}-${mes}-${y}`;
-};
-
-// Returns "yyyy-mm-dd" string for filter comparison
-const toISODate = (v) => {
-  const d = parseDate(v);
-  if (!d || isNaN(d)) return '';
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-};
-// ── /Date helpers ─────────────────────────────────────────────────────────────
+// Date helpers imported from shared utils
 
 const fmtMoney = (v) => {
   if (!v && v !== 0) return '—';
@@ -83,13 +63,14 @@ const fmtMoney = (v) => {
 const fmtValue = (col, v) => {
   if (v === null || v === undefined || v === '') return '—';
   if (col.type === 'money') return fmtMoney(v);
-  if (col.type === 'date')  return fmtDate(v);
+  if (col.type === 'date')  return formatDate(v);
   return String(v);
 };
 
 const EMPTY_FILTERS = { tipoCompra: [], tipoDoc: [], fechaDesde: '', fechaHasta: '', razonSocial: '' };
 
 export default function SIIView({ supabase, onShowConfirm, onViewDetail }) {
+  const { toast } = useToast();
   const [records, setRecords]           = useState([]);
   const [loading, setLoading]           = useState(true);
   const [search, setSearch]             = useState('');
@@ -100,6 +81,14 @@ export default function SIIView({ supabase, onShowConfirm, onViewDetail }) {
   const [sortKey, setSortKey]           = useState('fecha_docto');
   const [sortDir, setSortDir]           = useState('desc');
   const [page, setPage]                 = useState(1);
+  const [tipoDocMap, setTipoDocMap]     = useState(loadTipoDocMap);
+  const [showTipoDocPanel, setShowTipoDocPanel] = useState(false);
+
+  const getTipoDocLabel = useCallback((code) => tipoDocMap[Number(code)] || String(code), [tipoDocMap]);
+  const saveTipoDocMap = (map) => {
+    setTipoDocMap(map);
+    localStorage.setItem(TIPO_DOC_STORAGE_KEY, JSON.stringify(map));
+  };
 
   const [visibleCols, setVisibleCols] = useState(() => {
     try {
@@ -162,7 +151,14 @@ export default function SIIView({ supabase, onShowConfirm, onViewDetail }) {
   const displayCols = ALL_COLUMNS.filter(c => visibleCols.includes(c.key));
 
   const tipoCompraOptions = useMemo(() => [...new Set(records.map(r => r.tipo_compra).filter(Boolean))].sort(), [records]);
-  const tipoDocOptions    = useMemo(() => [...new Set(records.map(r => String(r.tipo_doc)).filter(v => v !== 'null' && v !== 'undefined'))].sort((a,b) => Number(a)-Number(b)), [records]);
+  const tipoDocOptions    = useMemo(() => [...new Set(records.map(r => r.tipo_doc).filter(v => v !== null && v !== undefined))].sort((a,b) => a-b).map(code => getTipoDocLabel(code)), [records, getTipoDocLabel]);
+
+  // All known codes: from defaults + actual data
+  const allTipoDocCodes = useMemo(() => {
+    const codes = new Set(Object.keys(DEFAULT_TIPO_DOC_MAP).map(Number));
+    records.forEach(r => { if (r.tipo_doc !== null && r.tipo_doc !== undefined) codes.add(Number(r.tipo_doc)); });
+    return [...codes].sort((a, b) => a - b);
+  }, [records]);
   const activeFilterCount = Object.values(filters).filter(v => Array.isArray(v) ? v.length > 0 : v !== '').length;
 
   const filtered = useMemo(() => {
@@ -176,7 +172,7 @@ export default function SIIView({ supabase, onShowConfirm, onViewDetail }) {
       );
     }
     if (filters.tipoCompra.length > 0)  rows = rows.filter(r => filters.tipoCompra.includes(r.tipo_compra));
-    if (filters.tipoDoc.length > 0)    rows = rows.filter(r => filters.tipoDoc.includes(String(r.tipo_doc)));
+    if (filters.tipoDoc.length > 0)    rows = rows.filter(r => filters.tipoDoc.includes(getTipoDocLabel(r.tipo_doc)));
     if (filters.razonSocial) { const q = filters.razonSocial.trim().toLowerCase(); rows = rows.filter(r => String(r.razon_social || '').toLowerCase().includes(q)); }
     if (filters.fechaDesde)  rows = rows.filter(r => toISODate(r.fecha_docto) >= filters.fechaDesde);
     if (filters.fechaHasta)  rows = rows.filter(r => { const d = toISODate(r.fecha_docto); return d && d <= filters.fechaHasta; });
@@ -210,7 +206,7 @@ export default function SIIView({ supabase, onShowConfirm, onViewDetail }) {
   // ── Excel Export ──────────────────────────────────────────────────────────
   const handleExportExcel = () => {
     const XLSX = window.XLSX;
-    if (!XLSX) { alert('La librería Excel aún no ha cargado. Intenta en un momento.'); return; }
+    if (!XLSX) { toast({ type: 'error', message: 'La librería Excel aún no ha cargado. Intenta en un momento.' }); return; }
 
     const data = filtered.map(row => {
       const obj = {};
@@ -218,7 +214,7 @@ export default function SIIView({ supabase, onShowConfirm, onViewDetail }) {
         obj[col.label] = (col.type === 'money')
           ? (Number(row[col.key]) || 0)
           : (col.type === 'date')
-            ? fmtDate(row[col.key])
+            ? formatDate(row[col.key])
             : (row[col.key] ?? '');
       });
       return obj;
@@ -231,61 +227,6 @@ export default function SIIView({ supabase, onShowConfirm, onViewDetail }) {
     XLSX.writeFile(wb, `sii_${today}.xlsx`);
   };
 
-  // ── Pagination component ──────────────────────────────────────────────────
-  const PaginationBar = ({ position }) => {
-    if (totalPages <= 1) return null;
-    const pages = Array.from({ length: totalPages }, (_, i) => i + 1)
-      .filter(p => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
-      .reduce((acc, p, idx, arr) => { if (idx > 0 && p - arr[idx - 1] > 1) acc.push('…'); acc.push(p); return acc; }, []);
-
-    if (position === 'bottom') return (
-      <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between gap-2">
-        <span className="text-xs text-slate-400">
-          Mostrando {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} de {filtered.length}
-        </span>
-        <div className="flex items-center gap-1">
-          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage === 1}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 border border-slate-200 disabled:opacity-30 disabled:pointer-events-none transition-all">
-            <ChevronLeft size={13} /> Anterior
-          </button>
-          <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 border border-slate-200 disabled:opacity-30 disabled:pointer-events-none transition-all">
-            Siguiente <ChevronRight size={13} />
-          </button>
-        </div>
-      </div>
-    );
-
-    // top
-    return (
-      <div className="flex items-center gap-1">
-        <button onClick={() => setPage(1)} disabled={safePage === 1}
-          className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-all">
-          <ChevronLeft size={13} />
-        </button>
-        <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage === 1}
-          className="px-2.5 py-1 rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-all">
-          Anterior
-        </button>
-        {pages.map((p, i) =>
-          p === '…'
-            ? <span key={`e${i}`} className="px-1 text-slate-300 text-xs">…</span>
-            : <button key={p} onClick={() => setPage(p)}
-                className={`w-7 h-7 rounded-lg text-xs font-semibold transition-all ${safePage === p ? 'bg-violet-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'}`}>
-                {p}
-              </button>
-        )}
-        <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}
-          className="px-2.5 py-1 rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-all">
-          Siguiente
-        </button>
-        <button onClick={() => setPage(totalPages)} disabled={safePage === totalPages}
-          className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-all">
-          <ChevronRight size={13} />
-        </button>
-      </div>
-    );
-  };
 
   return (
     <div className="space-y-6">
@@ -300,14 +241,47 @@ export default function SIIView({ supabase, onShowConfirm, onViewDetail }) {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={() => { setShowTipoDocPanel(p => !p); setShowColPanel(false); }}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg border text-sm font-medium transition-all active:scale-[0.98] ${showTipoDocPanel ? 'bg-violet-600 border-violet-600 text-white shadow-sm shadow-violet-600/20' : 'border-slate-200 text-slate-600 hover:border-slate-300 bg-white'}`}>
+            <Settings2 size={15} />
+            <span className="hidden sm:inline">Tipos Doc.</span>
+          </button>
           <button onClick={fetchData}
             className="flex items-center gap-2 px-3.5 py-2 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:border-slate-300 bg-white transition-all active:scale-[0.98]">
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
             <span className="hidden sm:inline">Actualizar</span>
           </button>
-
         </div>
       </div>
+
+      {/* Panel editor de tipos de documento */}
+      {showTipoDocPanel && (
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+              <Settings2 size={15} className="text-violet-500" /> Tipos de Documento
+            </h3>
+            <div className="flex items-center gap-2">
+              <button onClick={() => { saveTipoDocMap({ ...DEFAULT_TIPO_DOC_MAP }); }} className="text-xs text-slate-400 font-medium hover:underline">Restablecer</button>
+              <button onClick={() => setShowTipoDocPanel(false)} className="p-1 hover:bg-slate-100 rounded-lg text-slate-400"><X size={15} /></button>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {allTipoDocCodes.map(code => (
+              <div key={code} className="flex items-center gap-3">
+                <span className="text-xs font-bold text-slate-400 w-10 text-right shrink-0">{code}</span>
+                <input
+                  type="text"
+                  value={tipoDocMap[code] || ''}
+                  placeholder={`Código ${code}`}
+                  onChange={e => saveTipoDocMap({ ...tipoDocMap, [code]: e.target.value })}
+                  className="flex-1 px-3 py-2 bg-white border border-slate-200 hover:border-slate-300 rounded-lg text-sm font-medium text-slate-700 placeholder-slate-400 focus:ring-2 focus:ring-violet-500/10 focus:border-violet-500 transition-all outline-none"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Panel selector de columnas */}
       {showColPanel && (
@@ -349,13 +323,7 @@ export default function SIIView({ supabase, onShowConfirm, onViewDetail }) {
 
       {/* Sin datos */}
       {!loading && records.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-14 h-14 bg-violet-50 rounded-2xl flex items-center justify-center mb-4">
-            <FileText size={26} className="text-violet-400" />
-          </div>
-          <p className="text-base font-semibold text-slate-700">Sin datos SII</p>
-          <p className="text-sm text-slate-400 mt-1">Usa <span className="font-medium text-slate-500">Manejo de Datos</span> para importar el archivo Excel del libro de compras</p>
-        </div>
+        <EmptyState icon={FileText} title="Sin datos SII" subtitle="Usa Manejo de Datos para importar el archivo Excel del libro de compras" />
       )}
 
       {/* Filtros — inmediatamente sobre la tabla */}
@@ -450,7 +418,7 @@ export default function SIIView({ supabase, onShowConfirm, onViewDetail }) {
             <span className="text-xs font-medium text-slate-500">
               {loading ? 'Cargando...' : `${filtered.length} registro${filtered.length !== 1 ? 's' : ''}${(search || activeFilterCount > 0) ? ' (filtrado)' : ''}${!loading && filtered.length > 0 ? ` — pág. ${safePage}/${totalPages}` : ''}`}
             </span>
-            <PaginationBar position="top" />
+            <Pagination page={safePage} totalPages={totalPages} totalItems={filtered.length} pageSize={PAGE_SIZE} onPageChange={setPage} color="violet" position="top" />
           </div>
 
           <div className="overflow-x-auto">
@@ -493,7 +461,7 @@ export default function SIIView({ supabase, onShowConfirm, onViewDetail }) {
                       </td>
                       {displayCols.map(col => (
                         <td key={col.key} className={`px-4 py-2.5 whitespace-nowrap text-sm ${col.key === 'folio' ? 'font-semibold text-violet-700' : col.type === 'money' ? 'text-right font-mono text-slate-700 tabular-nums' : 'text-slate-600'}`}>
-                          {fmtValue(col, row[col.key])}
+                          {col.key === 'tipo_doc' ? getTipoDocLabel(row[col.key]) : fmtValue(col, row[col.key])}
                         </td>
                       ))}
                     </tr>
@@ -517,7 +485,7 @@ export default function SIIView({ supabase, onShowConfirm, onViewDetail }) {
             )}
           </div>
 
-          <PaginationBar position="bottom" />
+          <Pagination page={safePage} totalPages={totalPages} totalItems={filtered.length} pageSize={PAGE_SIZE} onPageChange={setPage} color="violet" position="bottom" />
         </div>
       )}
 

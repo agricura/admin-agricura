@@ -6,6 +6,9 @@ import {
 } from 'lucide-react';
 import { formatDate } from '../utils/formatters';
 import MultiSelect from '../components/MultiSelect';
+import Pagination from '../components/Pagination';
+import EmptyState from '../components/EmptyState';
+import { useToast } from '../context/ToastContext';
 
 const PAGE_SIZE = 20;
 const IS_DEV = import.meta.env.DEV;
@@ -56,6 +59,7 @@ function sinceISO(days) {
 }
 
 export default function BankView({ supabase }) {
+  const { toast } = useToast();
   const [accounts, setAccounts]               = useState([]);
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [loading, setLoading]                 = useState(false);
@@ -63,7 +67,6 @@ export default function BankView({ supabase }) {
   const [days, setDays]                       = useState(30);
   const [lastSyncedAt, setLastSyncedAt]       = useState(null);
   const [syncing, setSyncing]                 = useState(false);
-  const [syncMsg, setSyncMsg]                 = useState(null);
   const [page, setPage]                       = useState(1);
   const [search, setSearch]                   = useState('');
   const [sortKey, setSortKey]                 = useState('date');
@@ -134,22 +137,13 @@ export default function BankView({ supabase }) {
 
   const handleRefresh = async () => {
     setSyncing(true);
-    setSyncMsg(null);
     const result = await triggerSync();
-    if (IS_DEV) {
-      // Dev: data is already in Supabase, reload immediately
-      await loadFromSupabase();
-    } else {
-      // Production: GitHub Action takes ~1-2 min, reload now to show current data
-      await loadFromSupabase();
-    }
+    await loadFromSupabase();
     setSyncing(false);
     if (result.ok) {
-      setSyncMsg({ type: 'ok', text: result.message });
-      setTimeout(() => setSyncMsg(null), 8000);
+      toast({ type: 'success', message: result.message });
     } else {
-      setSyncMsg({ type: 'error', text: result.message });
-      setTimeout(() => setSyncMsg(null), 8000);
+      toast({ type: 'error', message: result.message });
     }
   };
 
@@ -217,61 +211,6 @@ export default function BankView({ supabase }) {
 
   const clearFilters = () => setFilters(EMPTY_BANK_FILTERS);
 
-  // ── Pagination component ──────────────────────────────────────────────────
-  const PaginationBar = ({ position }) => {
-    if (totalPages <= 1) return null;
-    const pages = Array.from({ length: totalPages }, (_, i) => i + 1)
-      .filter(p => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
-      .reduce((acc, p, idx, arr) => { if (idx > 0 && p - arr[idx - 1] > 1) acc.push('…'); acc.push(p); return acc; }, []);
-
-    if (position === 'bottom') return (
-      <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between gap-2">
-        <span className="text-xs text-slate-400">
-          Mostrando {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} de {filtered.length}
-        </span>
-        <div className="flex items-center gap-1">
-          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage === 1}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 border border-slate-200 disabled:opacity-30 disabled:pointer-events-none transition-all">
-            <ChevronLeft size={13} /> Anterior
-          </button>
-          <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 border border-slate-200 disabled:opacity-30 disabled:pointer-events-none transition-all">
-            Siguiente <ChevronRight size={13} />
-          </button>
-        </div>
-      </div>
-    );
-
-    // top
-    return (
-      <div className="flex items-center gap-1">
-        <button onClick={() => setPage(1)} disabled={safePage === 1}
-          className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-all">
-          <ChevronLeft size={13} />
-        </button>
-        <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage === 1}
-          className="px-2.5 py-1 rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-all">
-          Anterior
-        </button>
-        {pages.map((p, i) =>
-          p === '…'
-            ? <span key={`e${i}`} className="px-1 text-slate-300 text-xs">…</span>
-            : <button key={p} onClick={() => setPage(p)}
-                className={`w-7 h-7 rounded-lg text-xs font-semibold transition-all ${safePage === p ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'}`}>
-                {p}
-              </button>
-        )}
-        <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}
-          className="px-2.5 py-1 rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-all">
-          Siguiente
-        </button>
-        <button onClick={() => setPage(totalPages)} disabled={safePage === totalPages}
-          className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-all">
-          <ChevronRight size={13} />
-        </button>
-      </div>
-    );
-  };
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -295,20 +234,6 @@ export default function BankView({ supabase }) {
         </div>
       </header>
 
-      {/* Feedback sync */}
-      {syncMsg && (
-        <div className={`flex items-start gap-3 rounded-xl p-4 text-sm ${
-          syncMsg.type === 'error'
-            ? 'bg-rose-50 border border-rose-200 text-rose-700'
-            : 'bg-emerald-50 border border-emerald-200 text-emerald-700'
-        }`}>
-          {syncMsg.type === 'error'
-            ? <AlertCircle size={16} className="shrink-0 mt-0.5" />
-            : <Database size={16} className="shrink-0 mt-0.5" />}
-          <p className="font-medium">{syncMsg.text}</p>
-        </div>
-      )}
-
       {/* Error de Supabase */}
       {error && !loading && (
         <div className="flex items-start gap-3 bg-rose-50 border border-rose-200 rounded-xl p-4 text-sm text-rose-700">
@@ -330,23 +255,12 @@ export default function BankView({ supabase }) {
 
       {/* Sin datos */}
       {!loading && !error && accounts.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-24 gap-4 text-slate-400">
-          <Landmark size={40} className="text-slate-300" />
-          <p className="text-sm font-semibold">Sin transacciones en los últimos {days} días</p>
-          <p className="text-xs text-slate-300 max-w-sm text-center">
-            Los datos se sincronizan automáticamente cada 6h via GitHub Actions.
-            Para forzar una sincronización ahora, haz click en <strong className="text-slate-400">Actualizar</strong>{' '}
-            (requiere que el servidor local esté corriendo).
-          </p>
-          <button
-            onClick={handleRefresh}
-            disabled={syncing}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-all active:scale-[0.97] disabled:opacity-50 mt-2"
-          >
-            {syncing ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
-            Sincronizar ahora
-          </button>
-        </div>
+        <EmptyState
+          icon={Landmark}
+          title={`Sin transacciones en los últimos ${days} días`}
+          subtitle="Los datos se sincronizan automáticamente cada 6h via GitHub Actions."
+          action={{ label: 'Sincronizar ahora', onClick: handleRefresh, disabled: syncing, icon: RefreshCw }}
+        />
       )}
 
       {!loading && !error && accounts.length > 0 && (
@@ -501,7 +415,7 @@ export default function BankView({ supabase }) {
                     {isFiltered ? ' (filtrado)' : ''}
                     {filtered.length > 0 && ` — pág. ${safePage}/${totalPages}`}
                   </span>
-                  <PaginationBar position="top" />
+                  <Pagination page={safePage} totalPages={totalPages} totalItems={filtered.length} pageSize={PAGE_SIZE} onPageChange={setPage} color="emerald" position="top" />
                 </div>
 
                 {filtered.length === 0 ? (
@@ -569,7 +483,7 @@ export default function BankView({ supabase }) {
                   </div>
                 )}
 
-                <PaginationBar position="bottom" />
+                <Pagination page={safePage} totalPages={totalPages} totalItems={filtered.length} pageSize={PAGE_SIZE} onPageChange={setPage} color="emerald" position="bottom" />
               </div>
             </>
           )}

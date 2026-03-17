@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Package, X, Pencil, FileText, Upload, Loader2, ExternalLink, Trash2 } from 'lucide-react';
 import { formatCLP, formatDate } from '../utils/formatters';
 import ConfirmModal from './ConfirmModal';
+import { useToast } from '../context/ToastContext';
 
 const BUCKET = 'invoice-documents';
 const ALLOWED_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
@@ -10,6 +11,7 @@ const ACCEPT_STRING = '.pdf,.jpg,.jpeg,.png,.webp,.heic,.heif';
 const isImage = (url) => url && /\.(jpe?g|png|webp|heic|heif)(\?|$)/i.test(url);
 
 const InvoiceDetailModal = ({ invoice, onClose, onEdit, supabase }) => {
+  const { toast } = useToast();
   if (!invoice) return null;
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -44,6 +46,7 @@ const InvoiceDetailModal = ({ invoice, onClose, onEdit, supabase }) => {
 
       setDocUrl(publicUrl);
       invoice.document_url = publicUrl;
+      toast({ type: 'success', message: 'Documento subido correctamente' });
     } catch (err) {
       setUploadError(err.message);
     } finally {
@@ -67,6 +70,7 @@ const InvoiceDetailModal = ({ invoice, onClose, onEdit, supabase }) => {
           setDocUrl(null);
           invoice.document_url = null;
           setShowDoc(false);
+          toast({ type: 'success', message: 'Documento eliminado' });
         } catch (err) {
           setUploadError(err.message);
         } finally {

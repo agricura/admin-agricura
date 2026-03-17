@@ -3,12 +3,14 @@ import { ChevronLeft, Package, PlusCircle, MinusCircle, FileText, Upload, Loader
 import DateInput from '../components/DateInput';
 import SelectInput from '../components/SelectInput';
 import { formatCLP } from '../utils/formatters';
+import { useToast } from '../context/ToastContext';
 
 const BUCKET = 'invoice-documents';
 const ALLOWED_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
 const ACCEPT_STRING = '.pdf,.jpg,.jpeg,.png,.webp,.heic,.heif';
 
 function InvoiceForm({ supabase, onSuccess, invoiceToEdit, onShowConfirm }) {
+  const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     tipo_doc: invoiceToEdit?.tipo_doc || 'Factura',
@@ -152,9 +154,10 @@ function InvoiceForm({ supabase, onSuccess, invoiceToEdit, onShowConfirm }) {
         if (dbErr) throw dbErr;
       }
 
+      toast({ type: 'success', message: invoiceToEdit ? 'Documento actualizado' : 'Documento registrado' });
       onSuccess();
     } catch (err) {
-      onShowConfirm({ title: 'Error de Guardado', message: err.message, type: 'danger', onConfirm: () => {} });
+      toast({ type: 'error', message: `Error al guardar: ${err.message}` });
     } finally {
       setLoading(false);
     }

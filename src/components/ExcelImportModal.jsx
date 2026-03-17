@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { FileSpreadsheet, X, CheckCircle, AlertCircle, Upload, ChevronRight, FileText } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -64,6 +65,7 @@ const BATCH = 50;
 // ── Component ─────────────────────────────────────────────────────────────────
 
 const ExcelImportModal = ({ onClose, onImported, supabase }) => {
+  const { toast } = useToast();
   const [file, setFile]       = useState(null);
   const [loading, setLoading] = useState(false);
   const [log, setLog]         = useState([]);
@@ -214,6 +216,7 @@ const ExcelImportModal = ({ onClose, onImported, supabase }) => {
 
         if (!cancelledRef.current) {
           addLog('ok', '✓ Importación completada.');
+          toast({ type: 'success', message: 'Importación de datos completada' });
           setTimeout(() => { onImported(); onClose(); }, 2000);
         }
 

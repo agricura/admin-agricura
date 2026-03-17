@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { FileText, X, Upload, CheckCircle, AlertCircle } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
 
 // Fallback por si alguna celda numérica viene como string con puntos de miles
 const parseNum = (val) => {
@@ -88,6 +89,7 @@ const NUM_FIELDS = new Set([
 ]);
 
 const SIIImportModal = ({ supabase, onClose, onImported }) => {
+  const { toast } = useToast();
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
@@ -159,6 +161,7 @@ const SIIImportModal = ({ supabase, onClose, onImported }) => {
 
         if (!cancelledRef.current) {
           setStatus(`✓ ${inserted} registro${inserted !== 1 ? 's' : ''} importados${dupeMsg}`);
+          toast({ type: 'success', message: 'Importación SII completada' });
           setTimeout(() => { onImported(); onClose(); }, 1800);
         }
       } catch (err) {

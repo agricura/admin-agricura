@@ -631,7 +631,8 @@ export default function ControlPanel({ supabase }) {
                             <p className={`font-mono text-xs font-bold ${isOverdue ? 'text-rose-500' : inv.status_pago === 'PAGADO' ? 'text-emerald-600' : 'text-amber-600'}`}>
                               ${formatCLP(inv.total_a_pagar)}
                             </p>
-                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${isOverdue ? 'bg-rose-50 text-rose-600' : inv.status_pago === 'PAGADO' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                            <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${isOverdue ? 'bg-rose-50 text-rose-600' : inv.status_pago === 'PAGADO' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                              {isOverdue ? <AlertTriangle size={11} /> : inv.status_pago === 'PAGADO' ? <CheckCircle size={11} /> : <Clock size={11} />}
                               {isOverdue ? 'VENCIDA' : inv.status_pago}
                             </span>
                           </div>
