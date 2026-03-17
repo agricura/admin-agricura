@@ -141,12 +141,11 @@ export default function DataManagement({ supabase, onNewDocument, onShowConfirm,
         <p className="text-slate-400 text-sm font-medium mt-1">Gestiona el ingreso y la carga de documentos al sistema.</p>
       </header>
 
-      {/* ── Sección: Documentos ─────────────────────────────────────────── */}
+      {/* ── Sección: Agricura ────────────────────────────────────────── */}
       <div>
-        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 px-1">Documentos</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-4xl">
+        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 px-1">Agricura</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
 
-          {/* Card: Importar Agricura */}
           <button
             onClick={() => setShowAgricuraImport(true)}
             className="group relative bg-white border border-slate-200 rounded-2xl p-6 text-left hover:border-emerald-300 hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-200 active:scale-[0.99]"
@@ -156,11 +155,31 @@ export default function DataManagement({ supabase, onNewDocument, onShowConfirm,
             </div>
             <h3 className="text-sm font-bold text-slate-900 mb-1">Importar Agricura</h3>
             <p className="text-xs text-slate-400 font-medium leading-relaxed">
-              Carga facturas desde el archivo Excel interno.
+              Carga documentos de gasto desde el archivo Excel interno.
             </p>
           </button>
 
-          {/* Card: Importar SII Compras */}
+          <button
+            onClick={onNewDocument}
+            className="group relative bg-white border border-slate-200 rounded-2xl p-6 text-left hover:border-blue-300 hover:shadow-lg hover:shadow-blue-500/5 transition-all duration-200 active:scale-[0.99]"
+          >
+            <div className="w-11 h-11 bg-blue-50 rounded-xl flex items-center justify-center mb-4 group-hover:bg-blue-100 transition-colors">
+              <Plus size={20} className="text-blue-600" />
+            </div>
+            <h3 className="text-sm font-bold text-slate-900 mb-1">Registrar Documento</h3>
+            <p className="text-xs text-slate-400 font-medium leading-relaxed">
+              Ingresa manualmente una factura u otro documento de gasto.
+            </p>
+          </button>
+
+        </div>
+      </div>
+
+      {/* ── Sección: SII ─────────────────────────────────────────────── */}
+      <div>
+        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 px-1">Servicio de Impuestos Internos</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
+
           <button
             onClick={() => setShowSIIImport(true)}
             className="group relative bg-white border border-slate-200 rounded-2xl p-6 text-left hover:border-violet-300 hover:shadow-lg hover:shadow-violet-500/5 transition-all duration-200 active:scale-[0.99]"
@@ -174,7 +193,6 @@ export default function DataManagement({ supabase, onNewDocument, onShowConfirm,
             </p>
           </button>
 
-          {/* Card: Importar SII Ventas */}
           <button
             onClick={() => setShowSIIVentasImport(true)}
             className="group relative bg-white border border-slate-200 rounded-2xl p-6 text-left hover:border-amber-300 hover:shadow-lg hover:shadow-amber-500/5 transition-all duration-200 active:scale-[0.99]"
@@ -185,20 +203,6 @@ export default function DataManagement({ supabase, onNewDocument, onShowConfirm,
             <h3 className="text-sm font-bold text-slate-900 mb-1">Importar SII Ventas</h3>
             <p className="text-xs text-slate-400 font-medium leading-relaxed">
               Carga el libro de ventas exportado desde el SII.
-            </p>
-          </button>
-
-          {/* Card: Registrar Documento */}
-          <button
-            onClick={onNewDocument}
-            className="group relative bg-white border border-slate-200 rounded-2xl p-6 text-left hover:border-blue-300 hover:shadow-lg hover:shadow-blue-500/5 transition-all duration-200 active:scale-[0.99]"
-          >
-            <div className="w-11 h-11 bg-blue-50 rounded-xl flex items-center justify-center mb-4 group-hover:bg-blue-100 transition-colors">
-              <Plus size={20} className="text-blue-600" />
-            </div>
-            <h3 className="text-sm font-bold text-slate-900 mb-1">Registrar Documento</h3>
-            <p className="text-xs text-slate-400 font-medium leading-relaxed">
-              Ingresa manualmente una factura u otro documento.
             </p>
           </button>
 
