@@ -111,7 +111,7 @@ export default function SIIView({ supabase, onShowConfirm, onViewDetail }) {
     let from = 0;
     while (true) {
       const { data, error } = await supabase
-        .from('sii_records')
+        .from('sii_compras_records')
         .select('*')
         .order('id', { ascending: false })
         .range(from, from + BATCH - 1);

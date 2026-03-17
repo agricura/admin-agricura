@@ -1,18 +1,18 @@
 -- ══════════════════════════════════════════════════════════════════════════════
--- Tabla: sii_ventas_records
--- Registros del libro de ventas del SII, importados desde archivo Excel (.xlsx).
--- Misma estructura que sii_compras_records — el SII usa los mismos encabezados.
+-- Tabla: sii_compras_records
+-- Registros del libro de compras del SII, importados desde archivo Excel (.xlsx).
+-- Se vinculan con invoices mediante rut_proveedor + folio.
 -- ══════════════════════════════════════════════════════════════════════════════
 
-create table if not exists public.sii_ventas_records (
+create table if not exists public.sii_compras_records (
   id                         bigserial   primary key,
 
   -- ── Datos principales ──────────────────────────────────────────────────────
   nro                        integer,                     -- Número de fila en el libro
   tipo_doc                   integer,                     -- Código tipo documento (33=Factura, 34, 56, 61, etc.)
-  tipo_compra                text,                        -- Tipo de venta (SII lo llama "Tipo Compra")
-  rut_proveedor              text,                        -- RUT del cliente (SII lo llama "RUT Proveedor")
-  razon_social               text,                        -- Razón social del cliente
+  tipo_compra                text,                        -- Tipo de compra
+  rut_proveedor              text,                        -- RUT del proveedor
+  razon_social               text,                        -- Razón social del proveedor
   folio                      text,                        -- Folio del documento
 
   -- ── Fechas ─────────────────────────────────────────────────────────────────
@@ -23,7 +23,7 @@ create table if not exists public.sii_ventas_records (
   -- ── Montos principales ─────────────────────────────────────────────────────
   monto_exento               numeric,                     -- Monto exento de IVA
   monto_neto                 numeric,                     -- Monto neto
-  monto_iva_recuperable      numeric,                     -- IVA
+  monto_iva_recuperable      numeric,                     -- IVA recuperable
   monto_iva_no_recuperable   numeric,                     -- IVA no recuperable
   codigo_iva_no_rec          text,                        -- Código de IVA no recuperable
   monto_total                numeric,                     -- Monto total
@@ -39,7 +39,7 @@ create table if not exists public.sii_ventas_records (
   tabacos_puros              numeric,                     -- Impuesto tabacos puros
   tabacos_cigarrillos        numeric,                     -- Impuesto cigarrillos
   tabacos_elaborados         numeric,                     -- Impuesto tabacos elaborados
-  nce_nde_fact_compra        numeric,                     -- NCE o NDE sobre factura
+  nce_nde_fact_compra        numeric,                     -- NCE o NDE sobre factura de compra
 
   -- ── Otros impuestos ────────────────────────────────────────────────────────
   codigo_otro_impuesto       text,                        -- Código de otro impuesto
@@ -51,18 +51,18 @@ create table if not exists public.sii_ventas_records (
 );
 
 -- ── Índices ──────────────────────────────────────────────────────────────────
-create index if not exists sii_ventas_records_folio_idx     on public.sii_ventas_records(folio);
-create index if not exists sii_ventas_records_rut_idx       on public.sii_ventas_records(rut_proveedor);
-create index if not exists sii_ventas_records_fecha_idx     on public.sii_ventas_records(fecha_docto desc);
-create index if not exists sii_ventas_records_tipo_doc_idx  on public.sii_ventas_records(tipo_doc);
-create index if not exists sii_ventas_records_rut_folio_idx on public.sii_ventas_records(rut_proveedor, folio);
+create index if not exists sii_compras_records_folio_idx         on public.sii_compras_records(folio);
+create index if not exists sii_compras_records_rut_idx           on public.sii_compras_records(rut_proveedor);
+create index if not exists sii_compras_records_fecha_idx         on public.sii_compras_records(fecha_docto desc);
+create index if not exists sii_compras_records_tipo_doc_idx      on public.sii_compras_records(tipo_doc);
+create index if not exists sii_compras_records_rut_folio_idx     on public.sii_compras_records(rut_proveedor, folio);
 
 -- ── Row Level Security ──────────────────────────────────────────────────────
-alter table public.sii_ventas_records enable row level security;
+alter table public.sii_compras_records enable row level security;
 
-drop policy if exists "Authenticated users full access" on public.sii_ventas_records;
+drop policy if exists "Authenticated users full access" on public.sii_compras_records;
 create policy "Authenticated users full access"
-  on public.sii_ventas_records
+  on public.sii_compras_records
   for all
   to authenticated
   using (true)

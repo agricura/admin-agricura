@@ -143,7 +143,7 @@ const SIIImportModal = ({ supabase, onClose, onImported }) => {
         setStatus(`${rows.length} registros únicos${dupeMsg}. Subiendo...`);
 
         if (mode === 'replace') {
-          const { error: delErr } = await supabase.from('sii_records').delete().neq('id', 0);
+          const { error: delErr } = await supabase.from('sii_compras_records').delete().neq('id', 0);
           if (delErr) throw new Error('Error al limpiar tabla: ' + delErr.message);
         }
 
@@ -153,7 +153,7 @@ const SIIImportModal = ({ supabase, onClose, onImported }) => {
         for (let i = 0; i < rows.length; i += BATCH) {
           if (cancelledRef.current) { setStatus(`⚠ Cancelado — ${inserted} registros insertados antes de interrumpir.`); break; }
           const batch = rows.slice(i, i + BATCH);
-          const { error } = await supabase.from('sii_records').insert(batch);
+          const { error } = await supabase.from('sii_compras_records').insert(batch);
           if (error) throw new Error(`Error en lote ${Math.ceil(i/BATCH)+1}: ${error.message}`);
           inserted += batch.length;
           setStatus(`Insertando... ${inserted}/${rows.length}`);

@@ -125,7 +125,7 @@ export default function ControlPanel({ supabase }) {
       setter(all);
       setLoading(false);
     };
-    fetchAll('sii_records', setSiiRecords, setLoadingSII);
+    fetchAll('sii_compras_records', setSiiRecords, setLoadingSII);
   }, []);
 
   const todayStr = new Date().toISOString().split('T')[0];

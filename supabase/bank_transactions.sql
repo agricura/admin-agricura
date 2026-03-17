@@ -2,7 +2,7 @@
 -- Tabla: bank_transactions
 -- Guarda los movimientos bancarios obtenidos desde Fintoc.
 -- Permite vincularlos con documentos de "Agricura Docs" (invoices)
--- y "datos sii" (sii_records) para conciliación bancaria.
+-- y "datos sii" (sii_compras_records) para conciliación bancaria.
 -- ══════════════════════════════════════════════════════════════════════════════
 
 create table if not exists public.bank_transactions (
@@ -25,7 +25,7 @@ create table if not exists public.bank_transactions (
   -- ── Vinculación con documentos ──────────────────────────────────────────────
   -- Referencia a tabla "invoices" (Agricura Docs)
   invoice_id       text,                             -- UUID o ID del documento en invoices
-  -- Referencia a tabla "sii_records" (comrpas SII)
+  -- Referencia a tabla "sii_compras_records" (compras SII)
   sii_folio        text,                             -- Folio del documento SII relacionado
   sii_tipo_doc     integer,                          -- Tipo de documento SII (ej: 33=Factura)
 
