@@ -111,14 +111,6 @@ function AppContent({ supabaseClient, session }) {
             >
               <FileText size={18} className="shrink-0" />{!isCollapsed && <span>Datos SII</span>}
             </button>
-            <div className={`my-2 border-t border-white/10 ${isCollapsed ? 'mx-1' : 'mx-2.5'}`} />
-            <button
-              onClick={() => nav('dataManagement')}
-              title="Manejo de Datos"
-              className={`w-full flex items-center rounded-lg transition-all duration-200 text-sm font-medium ${isCollapsed ? 'justify-center p-2.5' : 'gap-3 px-3.5 py-2.5'} ${currentView === 'dataManagement' ? 'bg-blue-600 shadow-md shadow-blue-600/20 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
-            >
-              <Database size={18} className="shrink-0" />{!isCollapsed && <span>Manejo de Datos</span>}
-            </button>
           </div>
 
           <div className="px-1 pb-1 mt-2">
@@ -133,13 +125,25 @@ function AppContent({ supabaseClient, session }) {
           </div>
         </nav>
 
+        {/* Manejo de Datos — separado en la parte inferior */}
+        <div className={`shrink-0 border-t border-white/10 transition-all duration-300 ${isCollapsed ? 'px-1.5 py-2' : 'px-4 py-2'}`}>
+          <button
+            onClick={() => nav('dataManagement')}
+            title="Manejo de Datos"
+            className={`w-full flex items-center rounded-lg transition-all duration-200 text-sm font-medium ${isCollapsed ? 'justify-center p-2.5' : 'gap-3 px-3.5 py-2.5'} ${currentView === 'dataManagement' ? 'bg-blue-600 shadow-md shadow-blue-600/20 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
+          >
+            <Database size={18} className="shrink-0" />{!isCollapsed && <span>Manejo de Datos</span>}
+          </button>
+          <div className={`mt-2 border-t border-white/10 ${isCollapsed ? '-mx-1.5' : '-mx-4'}`} />
+        </div>
+
         {/* Collapse toggle — desktop only */}
         <button
           onClick={toggleCollapse}
-          className="hidden lg:flex items-center justify-center py-2 mx-2 mb-1 rounded-lg text-slate-500 hover:bg-white/5 hover:text-white transition-all"
+          className={`hidden lg:flex items-center justify-center gap-2 mx-3 mb-2 py-1.5 rounded-lg border border-white/10 text-slate-400 hover:bg-white/10 hover:text-white hover:border-white/20 transition-all active:scale-[0.97] ${isCollapsed ? 'mx-1.5' : ''}`}
           title={isCollapsed ? 'Expandir menú' : 'Colapsar menú'}
         >
-          {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+          {isCollapsed ? <ChevronRight size={14} /> : <><ChevronLeft size={14} /><span className="text-xs font-medium"></span></>}
         </button>
 
         <div className={`bg-slate-950/50 border-t border-white/5 flex flex-col gap-3 shrink-0 transition-all duration-300 ${isCollapsed ? 'p-2 items-center' : 'p-4'}`}>
