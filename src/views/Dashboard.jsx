@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  CheckCircle, Clock, FileText, Wallet, Search,
+  CheckCircle, Clock, FileText, Search,
   ChevronLeft, ChevronRight, Trash2, Pencil,
   Settings2, ChevronUp, ChevronDown,
   Eye, EyeOff, X, Download, AlertCircle, AlertTriangle, Filter,
@@ -260,12 +260,11 @@ function Dashboard({ supabase, onEdit, onViewDetail, onShowConfirm }) {
       )}
 
       {/* STATS CARDS */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 lg:gap-4">
+      <div className="grid grid-cols-3 gap-3 lg:gap-4">
         {[
           { label: 'Total Pendiente', val: stats.pend, color: 'rose',    icon: <Clock size={18} /> },
           { label: 'Total Pagado',    val: stats.paid, color: 'emerald', icon: <CheckCircle size={18} /> },
           { label: 'Docs Filtrados',  val: filteredInvoices.length, color: 'blue', raw: true, icon: <FileText size={18} /> },
-          { label: 'Sistema',         val: 'Conectado', color: 'emerald', text: true, icon: <Wallet size={18} /> },
         ].map((card, i) => (
           <div key={i} className="bg-white p-4 lg:p-5 rounded-xl border border-slate-200/60 flex items-start gap-3 hover:shadow-md hover:border-slate-200 transition-all duration-200 group">
             <div className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${card.color === 'emerald' ? 'bg-emerald-50 text-emerald-600' : card.color === 'rose' ? 'bg-rose-50 text-rose-600' : 'bg-blue-50 text-blue-600'}`}>
