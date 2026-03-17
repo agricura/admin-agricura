@@ -28,22 +28,19 @@ export default function DataManagement({ supabase, onNewDocument, onShowConfirm,
   const fetchLinkedAccounts = useCallback(async () => {
     setLoadingAccounts(true);
     try {
-      if (IS_DEV) {
-        const res = await fetch(`${SERVER_URL}/api/fintoc/links`);
-        if (!res.ok) throw new Error('Error al cargar cuentas');
-        setLinkedAccounts(await res.json());
-      } else {
-        const res = await fetch('/api/bank-links');
-        if (!res.ok) throw new Error('Error al cargar cuentas');
-        setLinkedAccounts(await res.json());
-      }
+      const { data, error } = await supabase
+        .from('fintoc_links')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setLinkedAccounts(data ?? []);
     } catch {
       // Table may not exist yet — show empty state
       setLinkedAccounts([]);
     } finally {
       setLoadingAccounts(false);
     }
-  }, []);
+  }, [supabase]);
 
   useEffect(() => { fetchLinkedAccounts(); }, [fetchLinkedAccounts]);
 
