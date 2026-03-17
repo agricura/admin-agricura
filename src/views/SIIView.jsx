@@ -127,6 +127,8 @@ export default function SIIView({ supabase, onShowConfirm, onViewDetail }) {
     setLoading(false);
   };
 
+  const normalizeRut = (rut) => String(rut || '').trim().replace(/\./g, '').toUpperCase();
+
   const fetchInvoiceKeys = async () => {
     let from = 0;
     const map = new Map();
@@ -137,7 +139,7 @@ export default function SIIView({ supabase, onShowConfirm, onViewDetail }) {
         .range(from, from + 999);
       if (error || !data) break;
       data.forEach(r => {
-        if (r.rut && r.folio) map.set(`${String(r.rut).trim()}|${String(r.folio).trim()}`, r);
+        if (r.rut && r.folio) map.set(`${normalizeRut(r.rut)}|${String(r.folio).trim()}`, r);
       });
       if (data.length < 1000) break;
       from += 1000;
@@ -450,7 +452,7 @@ export default function SIIView({ supabase, onShowConfirm, onViewDetail }) {
                   {pageRows.length === 0 ? (
                     <tr><td colSpan={displayCols.length + 1} className="px-4 py-12 text-center text-sm text-slate-400">No hay registros que coincidan con los filtros aplicados.</td></tr>
                   ) : pageRows.map((row, idx) => {
-                    const matchKey = `${String(row.rut_proveedor || '').trim()}|${String(row.folio || '').trim()}`;
+                    const matchKey = `${normalizeRut(row.rut_proveedor)}|${String(row.folio || '').trim()}`;
                     const matchedInvoice = invoiceMap.get(matchKey);
                     return (
                     <tr key={row.id || idx} className="hover:bg-slate-50/70 transition-colors">

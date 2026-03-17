@@ -71,7 +71,7 @@ const SortTh = ({ label, colKey, sort, onSort, right = false }) => {
 
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export default function ControlPanel({ supabase }) {
+export default function ControlPanel({ supabase, onEditInvoice }) {
   // ── Shared invoices from context ──────────────────────────────────────────
   const { invoices, loading: loadingInv, error: invError, updateInvoice } = useInvoices();
 
@@ -890,6 +890,7 @@ export default function ControlPanel({ supabase }) {
         <InvoiceDetailModal
           invoice={viewingInvoice}
           onClose={() => setViewingInvoice(null)}
+          onEdit={onEditInvoice ? (inv) => { setViewingInvoice(null); onEditInvoice(inv); } : undefined}
           supabase={supabase}
         />
       )}

@@ -200,7 +200,10 @@ function AppContent({ supabaseClient, session }) {
       <main className="flex-1 overflow-auto h-full relative bg-slate-50 flex flex-col">
         <div className="flex-1 w-full max-w-[1600px] mx-auto p-4 lg:p-8">
           {currentView === 'controlPanel' && (
-            <ControlPanel supabase={supabaseClient} />
+            <ControlPanel
+              supabase={supabaseClient}
+              onEditInvoice={(inv) => { setInvoiceToEdit(inv); setCurrentView('form'); }}
+            />
           )}
           {currentView === 'dashboard' && (
             <Dashboard

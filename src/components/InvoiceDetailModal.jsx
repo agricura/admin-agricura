@@ -98,9 +98,10 @@ const InvoiceDetailModal = ({ invoice, onClose, onEdit, supabase }) => {
             {onEdit && (
               <button
                 onClick={() => onEdit(invoice)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg text-sm font-medium transition-all active:scale-[0.98]"
+                className="flex items-center p-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg transition-all active:scale-[0.98]"
+                title="Editar"
               >
-                <Pencil size={14} /> Editar
+                <Pencil size={16} />
               </button>
             )}
             <button onClick={onClose} className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-500 rounded-lg transition-all active:scale-[0.98]"><X size={18} /></button>
