@@ -350,12 +350,12 @@ export default function ControlPanel({ supabase }) {
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════════
-          DATOS AGRICURA
+          Agricura Docs
       ════════════════════════════════════════════════════════════════════════ */}
       <section>
         <SectionHeading
           color="bg-blue-500"
-          title="Datos Agricura"
+          title="Agricura Docs"
           badge={!loadingInv ? `${invoices.length} documentos` : null}
         />
 
@@ -648,12 +648,12 @@ export default function ControlPanel({ supabase }) {
       </section>
 
       {/* ═══════════════════════════════════════════════════════════════════════
-          DATOS SII
+          SII Compras
       ════════════════════════════════════════════════════════════════════════ */}
       <section>
         <SectionHeading
           color="bg-violet-500"
-          title="Datos SII"
+          title="SII Compras"
           badge={!loadingSII ? `${siiRecords.length} registros` : null}
         />
 

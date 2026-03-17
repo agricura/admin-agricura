@@ -1,8 +1,8 @@
-// c:\Users\curam\index\admin-agricura\src\views\DataManagement.jsx
 import React, { useState, useEffect, useCallback } from 'react';
-import { Upload, Plus, FileSpreadsheet, FileText, X, ChevronRight, Database, CheckCircle2, Landmark, Trash2, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Plus, FileSpreadsheet, FileText, Database, CheckCircle2, Landmark, Trash2, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
 import ExcelImportModal from '../components/ExcelImportModal';
 import SIIImportModal from '../components/SIIImportModal';
+import SIIVentasImportModal from '../components/SIIVentasImportModal';
 import { loadScript } from '../lib/supabase';
 import { useToast } from '../context/ToastContext';
 
@@ -11,17 +11,17 @@ const SERVER_URL = 'http://localhost:3001';
 
 export default function DataManagement({ supabase, onNewDocument, onShowConfirm, onNavigateToPanel }) {
   const { toast } = useToast();
-  const [showChooser, setShowChooser] = useState(false);
   const [showAgricuraImport, setShowAgricuraImport] = useState(false);
   const [showSIIImport, setShowSIIImport] = useState(false);
+  const [showSIIVentasImport, setShowSIIVentasImport] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-  const [successType, setSuccessType] = useState(''); // 'Agricura' | 'SII'
+  const [successType, setSuccessType] = useState('');
   const [countdown, setCountdown] = useState(3);
 
   // Linked accounts state
   const [linkedAccounts, setLinkedAccounts] = useState([]);
   const [loadingAccounts, setLoadingAccounts] = useState(true);
-  const [unlinkTarget, setUnlinkTarget] = useState(null); // account to unlink
+  const [unlinkTarget, setUnlinkTarget] = useState(null);
   const [deleteTransactions, setDeleteTransactions] = useState(false);
   const [unlinking, setUnlinking] = useState(false);
 
@@ -35,7 +35,6 @@ export default function DataManagement({ supabase, onNewDocument, onShowConfirm,
       if (error) throw error;
       setLinkedAccounts(data ?? []);
     } catch {
-      // Table may not exist yet — show empty state
       setLinkedAccounts([]);
     } finally {
       setLoadingAccounts(false);
@@ -91,26 +90,17 @@ export default function DataManagement({ supabase, onNewDocument, onShowConfirm,
     return () => clearInterval(interval);
   }, [showSuccess]);
 
-  const openChooser = () => setShowChooser(true);
-  const closeChooser = () => setShowChooser(false);
-
-  const handleSelectAgricura = () => { closeChooser(); setShowAgricuraImport(true); };
-  const handleSelectSII      = () => { closeChooser(); setShowSIIImport(true); };
-
   const handleConnectFintoc = async () => {
-    closeChooser();
     try {
       await loadScript('https://js.fintoc.com/v1/');
-      
       if (!window.Fintoc) throw new Error('Fintoc SDK no cargó correctamente');
 
       const widget = window.Fintoc.create({
         publicKey: import.meta.env.VITE_FINTOC_PUBLIC_KEY,
         holderType: 'individual',
         product: 'movements',
-        webhookUrl: '', // Opcional
+        webhookUrl: '',
         onSuccess: async (publicToken) => {
-          // Enviar public_token a tu servidor NodeJS
           try {
             const exchangeUrl = IS_DEV ? `${SERVER_URL}/api/fintoc/exchange` : '/api/fintoc/exchange';
             const response = await fetch(exchangeUrl, {
@@ -118,16 +108,14 @@ export default function DataManagement({ supabase, onNewDocument, onShowConfirm,
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ public_token: publicToken }),
             });
-            
             if (!response.ok) throw new Error('Error al vincular cuenta en el servidor');
-            
             toast({ type: 'success', message: 'Cuenta bancaria vinculada exitosamente' });
             fetchLinkedAccounts();
           } catch (err) {
             toast({ type: 'error', message: err.message || 'Error al vincular cuenta' });
           }
         },
-        onExit: () => { console.log('Widget cerrado'); },
+        onExit: () => {},
       });
 
       widget.open();
@@ -142,7 +130,7 @@ export default function DataManagement({ supabase, onNewDocument, onShowConfirm,
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
       {/* Header */}
       <header className="px-1">
@@ -153,59 +141,90 @@ export default function DataManagement({ supabase, onNewDocument, onShowConfirm,
         <p className="text-slate-400 text-sm font-medium mt-1">Gestiona el ingreso y la carga de documentos al sistema.</p>
       </header>
 
-      {/* Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 max-w-3xl">
+      {/* ── Sección: Documentos ─────────────────────────────────────────── */}
+      <div>
+        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 px-1">Documentos</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-4xl">
 
-        {/* Card: Importar Datos */}
-        <button
-          onClick={openChooser}
-          className="group relative bg-white border border-slate-200 rounded-2xl p-7 text-left hover:border-blue-300 hover:shadow-lg hover:shadow-blue-500/5 transition-all duration-200 active:scale-[0.99]"
-        >
-          <div className="flex items-start justify-between mb-5">
-            <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center group-hover:bg-emerald-100 transition-colors">
-              <Upload size={22} className="text-emerald-600" />
+          {/* Card: Importar Agricura */}
+          <button
+            onClick={() => setShowAgricuraImport(true)}
+            className="group relative bg-white border border-slate-200 rounded-2xl p-6 text-left hover:border-emerald-300 hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-200 active:scale-[0.99]"
+          >
+            <div className="w-11 h-11 bg-emerald-50 rounded-xl flex items-center justify-center mb-4 group-hover:bg-emerald-100 transition-colors">
+              <FileSpreadsheet size={20} className="text-emerald-600" />
             </div>
-            <ChevronRight size={18} className="text-slate-300 group-hover:text-blue-400 transition-colors mt-1" />
-          </div>
-          <h3 className="text-base font-bold text-slate-900 mb-1">Importar Datos</h3>
-          <p className="text-sm text-slate-400 font-medium leading-relaxed">
-            Carga documentos desde un archivo Excel. Elige entre datos de <span className="text-slate-600 font-semibold">Agricura</span> o del <span className="text-slate-600 font-semibold">SII</span>.
-          </p>
-        </button>
+            <h3 className="text-sm font-bold text-slate-900 mb-1">Importar Agricura</h3>
+            <p className="text-xs text-slate-400 font-medium leading-relaxed">
+              Carga facturas desde el archivo Excel interno.
+            </p>
+          </button>
 
-        {/* Card: Registrar Documento */}
-        <button
-          onClick={onNewDocument}
-          className="group relative bg-white border border-slate-200 rounded-2xl p-7 text-left hover:border-blue-300 hover:shadow-lg hover:shadow-blue-500/5 transition-all duration-200 active:scale-[0.99]"
-        >
-          <div className="flex items-start justify-between mb-5">
-            <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center group-hover:bg-blue-100 transition-colors">
-              <Plus size={22} className="text-blue-600" />
+          {/* Card: Importar SII Compras */}
+          <button
+            onClick={() => setShowSIIImport(true)}
+            className="group relative bg-white border border-slate-200 rounded-2xl p-6 text-left hover:border-violet-300 hover:shadow-lg hover:shadow-violet-500/5 transition-all duration-200 active:scale-[0.99]"
+          >
+            <div className="w-11 h-11 bg-violet-50 rounded-xl flex items-center justify-center mb-4 group-hover:bg-violet-100 transition-colors">
+              <FileText size={20} className="text-violet-600" />
             </div>
-            <ChevronRight size={18} className="text-slate-300 group-hover:text-blue-400 transition-colors mt-1" />
-          </div>
-          <h3 className="text-base font-bold text-slate-900 mb-1">Registrar Documento</h3>
-          <p className="text-sm text-slate-400 font-medium leading-relaxed">
-            Ingresa manualmente una factura, boleta u otro tipo de documento al sistema.
-          </p>
-        </button>
+            <h3 className="text-sm font-bold text-slate-900 mb-1">Importar SII Compras</h3>
+            <p className="text-xs text-slate-400 font-medium leading-relaxed">
+              Carga el libro de compras exportado desde el SII.
+            </p>
+          </button>
 
+          {/* Card: Importar SII Ventas */}
+          <button
+            onClick={() => setShowSIIVentasImport(true)}
+            className="group relative bg-white border border-slate-200 rounded-2xl p-6 text-left hover:border-amber-300 hover:shadow-lg hover:shadow-amber-500/5 transition-all duration-200 active:scale-[0.99]"
+          >
+            <div className="w-11 h-11 bg-amber-50 rounded-xl flex items-center justify-center mb-4 group-hover:bg-amber-100 transition-colors">
+              <FileText size={20} className="text-amber-600" />
+            </div>
+            <h3 className="text-sm font-bold text-slate-900 mb-1">Importar SII Ventas</h3>
+            <p className="text-xs text-slate-400 font-medium leading-relaxed">
+              Carga el libro de ventas exportado desde el SII.
+            </p>
+          </button>
+
+          {/* Card: Registrar Documento */}
+          <button
+            onClick={onNewDocument}
+            className="group relative bg-white border border-slate-200 rounded-2xl p-6 text-left hover:border-blue-300 hover:shadow-lg hover:shadow-blue-500/5 transition-all duration-200 active:scale-[0.99]"
+          >
+            <div className="w-11 h-11 bg-blue-50 rounded-xl flex items-center justify-center mb-4 group-hover:bg-blue-100 transition-colors">
+              <Plus size={20} className="text-blue-600" />
+            </div>
+            <h3 className="text-sm font-bold text-slate-900 mb-1">Registrar Documento</h3>
+            <p className="text-xs text-slate-400 font-medium leading-relaxed">
+              Ingresa manualmente una factura u otro documento.
+            </p>
+          </button>
+
+        </div>
       </div>
 
-      {/* ── Cuentas Bancarias Vinculadas ─────────────────────────────────── */}
-      <div className="max-w-3xl">
+      {/* ── Sección: Cuentas Bancarias ──────────────────────────────────── */}
+      <div className="max-w-4xl">
         <div className="flex items-center justify-between mb-3 px-1">
-          <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-            <Landmark size={15} className="text-emerald-600" />
-            Cuentas Bancarias Vinculadas
-          </h3>
-          <button
-            onClick={fetchLinkedAccounts}
-            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-all"
-            title="Recargar"
-          >
-            <RefreshCw size={14} />
-          </button>
+          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Cuentas Bancarias</h3>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleConnectFintoc}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-semibold transition-all active:scale-[0.98]"
+            >
+              <Plus size={14} />
+              Vincular Cuenta
+            </button>
+            <button
+              onClick={fetchLinkedAccounts}
+              className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-all"
+              title="Recargar"
+            >
+              <RefreshCw size={14} />
+            </button>
+          </div>
         </div>
 
         {loadingAccounts ? (
@@ -216,7 +235,14 @@ export default function DataManagement({ supabase, onNewDocument, onShowConfirm,
           <div className="bg-white border border-slate-200 rounded-xl p-8 text-center">
             <Landmark size={28} className="text-slate-300 mx-auto mb-2" />
             <p className="text-sm font-medium text-slate-500">No hay cuentas vinculadas</p>
-            <p className="text-xs text-slate-400 mt-1">Usa "Importar Datos → Conectar Banco" para vincular una cuenta.</p>
+            <p className="text-xs text-slate-400 mt-1">Vincula una cuenta bancaria para sincronizar movimientos automáticamente.</p>
+            <button
+              onClick={handleConnectFintoc}
+              className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-semibold transition-all active:scale-[0.98]"
+            >
+              <Plus size={14} />
+              Vincular Cuenta
+            </button>
           </div>
         ) : (
           <div className="space-y-2">
@@ -300,77 +326,6 @@ export default function DataManagement({ supabase, onNewDocument, onShowConfirm,
         </div>
       )}
 
-      {/* ── Chooser popup ─────────────────────────────────────────────────── */}
-      {showChooser && (
-        <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/30 backdrop-blur-sm p-4 animate-in fade-in">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200/60 w-full max-w-md overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 bg-emerald-50 rounded-xl flex items-center justify-center">
-                  <Upload size={18} className="text-emerald-600" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900">Importar Datos</h3>
-                  <p className="text-xs text-slate-400 font-medium">Selecciona la fuente de los datos</p>
-                </div>
-              </div>
-              <button
-                onClick={closeChooser}
-                className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-400 rounded-lg transition-all active:scale-[0.97]"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            {/* Options */}
-            <div className="p-5 space-y-3">
-              <button
-                onClick={handleSelectAgricura}
-                className="w-full flex items-center gap-4 p-4 rounded-xl border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/40 transition-all duration-150 active:scale-[0.99] text-left group"
-              >
-                <div className="w-10 h-10 bg-emerald-50 rounded-lg flex items-center justify-center shrink-0 group-hover:bg-emerald-100 transition-colors">
-                  <FileSpreadsheet size={20} className="text-emerald-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">Importar datos de Agricura</p>
-                  <p className="text-xs text-slate-400 mt-0.5">Carga facturas desde el archivo Excel interno.</p>
-                </div>
-                <ChevronRight size={16} className="text-slate-300 group-hover:text-emerald-500 ml-auto shrink-0 transition-colors" />
-              </button>
-
-              <button
-                onClick={handleSelectSII}
-                className="w-full flex items-center gap-4 p-4 rounded-xl border border-slate-200 hover:border-violet-300 hover:bg-violet-50/40 transition-all duration-150 active:scale-[0.99] text-left group"
-              >
-                <div className="w-10 h-10 bg-violet-50 rounded-lg flex items-center justify-center shrink-0 group-hover:bg-violet-100 transition-colors">
-                  <FileText size={20} className="text-violet-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">Importar datos del SII</p>
-                  <p className="text-xs text-slate-400 mt-0.5">Carga el libro de compras exportado desde el SII.</p>
-                </div>
-                <ChevronRight size={16} className="text-slate-300 group-hover:text-violet-500 ml-auto shrink-0 transition-colors" />
-              </button>
-
-              <button
-                onClick={handleConnectFintoc}
-                className="w-full flex items-center gap-4 p-4 rounded-xl border border-slate-200 hover:border-rose-300 hover:bg-rose-50/40 transition-all duration-150 active:scale-[0.99] text-left group"
-              >
-                <div className="w-10 h-10 bg-rose-50 rounded-lg flex items-center justify-center shrink-0 group-hover:bg-rose-100 transition-colors">
-                  <Landmark size={20} className="text-rose-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">Conectar Banco (Fintoc)</p>
-                  <p className="text-xs text-slate-400 mt-0.5">Vincula Santander para extraer movimientos.</p>
-                </div>
-                <ChevronRight size={16} className="text-slate-300 group-hover:text-rose-500 ml-auto shrink-0 transition-colors" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ── Modals ─────────────────────────────────────────────────────────── */}
       {showAgricuraImport && (
         <ExcelImportModal
@@ -384,7 +339,15 @@ export default function DataManagement({ supabase, onNewDocument, onShowConfirm,
         <SIIImportModal
           supabase={supabase}
           onClose={() => setShowSIIImport(false)}
-          onImported={() => { setShowSIIImport(false); handleImported('SII'); }}
+          onImported={() => { setShowSIIImport(false); handleImported('SII Compras'); }}
+        />
+      )}
+
+      {showSIIVentasImport && (
+        <SIIVentasImportModal
+          supabase={supabase}
+          onClose={() => setShowSIIVentasImport(false)}
+          onImported={() => { setShowSIIVentasImport(false); handleImported('SII Ventas'); }}
         />
       )}
 

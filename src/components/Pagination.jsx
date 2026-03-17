@@ -5,6 +5,7 @@ const COLOR_MAP = {
   blue:    'bg-blue-600',
   violet:  'bg-violet-600',
   emerald: 'bg-emerald-600',
+  amber:   'bg-amber-600',
 };
 
 export default function Pagination({ page, totalPages, totalItems, pageSize, onPageChange, color = 'blue', position = 'top' }) {

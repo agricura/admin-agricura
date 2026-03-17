@@ -14,7 +14,6 @@ const parseNum = (val) => {
 // Convierte fecha Excel (serial, Date obj, "dd-mm-yy", "dd-mm-yyyy") → "yyyy/mm/dd"
 const parseExcelDate = (val) => {
   if (!val && val !== 0) return '';
-  // JS Date object (XLSX.js a veces retorna esto directamente)
   if (val instanceof Date) {
     if (isNaN(val)) return '';
     const y = val.getFullYear();
@@ -22,7 +21,6 @@ const parseExcelDate = (val) => {
     const d = String(val.getDate()).padStart(2, '0');
     return `${y}/${m}/${d}`;
   }
-  // Serial numérico de Excel
   if (typeof val === 'number') {
     const utc = (val - 25569) * 86400000;
     const d = new Date(utc);
@@ -34,22 +32,19 @@ const parseExcelDate = (val) => {
     }
   }
   const s = String(val).trim();
-  // dd-mm-yy o dd-mm-yyyy
   const m1 = s.match(/^(\d{1,2})-(\d{1,2})-(\d{2,4})$/);
   if (m1) {
     let [, dd, mm, yy] = m1;
     if (yy.length === 2) yy = parseInt(yy) < 50 ? `20${yy}` : `19${yy}`;
     return `${yy}/${mm.padStart(2,'0')}/${dd.padStart(2,'0')}`;
   }
-  // yyyy-mm-dd → yyyy/mm/dd
   const m2 = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (m2) return `${m2[1]}/${m2[2]}/${m2[3]}`;
-  return s; // devuelve tal cual si no se puede interpretar
+  return s;
 };
 
 const DATE_FIELDS = new Set(['fecha_docto', 'fecha_recepcion', 'fecha_acuse']);
 
-// Mapeo encabezado Excel → campo BD
 const COL_MAP = {
   'Nro':                             'nro',
   'Tipo Doc':                        'tipo_doc',
@@ -88,12 +83,12 @@ const NUM_FIELDS = new Set([
   'tabacos_elaborados','nce_nde_fact_compra','valor_otro_impuesto',
 ]);
 
-const SIIImportModal = ({ supabase, onClose, onImported }) => {
+const SIIVentasImportModal = ({ supabase, onClose, onImported }) => {
   const { toast } = useToast();
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
-  const [mode, setMode] = useState('append'); // 'append' | 'replace'
+  const [mode, setMode] = useState('append');
   const cancelledRef = useRef(false);
 
   const handleCancel = () => {
@@ -119,7 +114,6 @@ const SIIImportModal = ({ supabase, onClose, onImported }) => {
       if (row.folio !== undefined) row.folio = String(row.folio).trim();
       return row;
     }).filter(r => r.folio);
-    // Deduplicate by rut_proveedor+folio — each provider has its own folio sequence
     const seen = new Map();
     parsed.forEach(r => seen.set(`${r.rut_proveedor}|${r.folio}`, r));
     const rows = Array.from(seen.values());
@@ -143,17 +137,16 @@ const SIIImportModal = ({ supabase, onClose, onImported }) => {
         setStatus(`${rows.length} registros únicos${dupeMsg}. Subiendo...`);
 
         if (mode === 'replace') {
-          const { error: delErr } = await supabase.from('sii_records').delete().neq('id', 0);
+          const { error: delErr } = await supabase.from('sii_ventas_records').delete().neq('id', 0);
           if (delErr) throw new Error('Error al limpiar tabla: ' + delErr.message);
         }
 
-        // Insertar en lotes de 200
         const BATCH = 200;
         let inserted = 0;
         for (let i = 0; i < rows.length; i += BATCH) {
           if (cancelledRef.current) { setStatus(`⚠ Cancelado — ${inserted} registros insertados antes de interrumpir.`); break; }
           const batch = rows.slice(i, i + BATCH);
-          const { error } = await supabase.from('sii_records').insert(batch);
+          const { error } = await supabase.from('sii_ventas_records').insert(batch);
           if (error) throw new Error(`Error en lote ${Math.ceil(i/BATCH)+1}: ${error.message}`);
           inserted += batch.length;
           setStatus(`Insertando... ${inserted}/${rows.length}`);
@@ -161,7 +154,7 @@ const SIIImportModal = ({ supabase, onClose, onImported }) => {
 
         if (!cancelledRef.current) {
           setStatus(`✓ ${inserted} registro${inserted !== 1 ? 's' : ''} importados${dupeMsg}`);
-          toast({ type: 'success', message: 'Importación SII completada' });
+          toast({ type: 'success', message: 'Importación SII Ventas completada' });
           setTimeout(() => { onImported(); onClose(); }, 1800);
         }
       } catch (err) {
@@ -179,23 +172,22 @@ const SIIImportModal = ({ supabase, onClose, onImported }) => {
       <div className="bg-white w-full max-w-lg rounded-xl shadow-2xl p-6 lg:p-7 relative border border-slate-200/60 max-h-[95vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-3">
-            <div className="bg-violet-50 p-2 rounded-lg text-violet-600"><FileText size={20} /></div>
+            <div className="bg-amber-50 p-2 rounded-lg text-amber-600"><FileText size={20} /></div>
             <div>
-              <h3 className="text-base font-bold text-slate-900">Importar Data SII</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Archivo Excel (.xlsx) del libro de SII Compras</p>
+              <h3 className="text-base font-bold text-slate-900">Importar Data SII Ventas</h3>
+              <p className="text-xs text-slate-400 mt-0.5">Archivo Excel (.xlsx) del libro de SII Ventas</p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg transition-all active:scale-[0.98] text-slate-400"><X size={18} /></button>
         </div>
 
-        {/* Info columnas */}
         <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 mb-5 space-y-3">
-          <div className="flex items-center gap-2 text-violet-600">
+          <div className="flex items-center gap-2 text-amber-600">
             <CheckCircle size={15} className="shrink-0" />
             <p className="text-xs font-semibold uppercase tracking-wide">Formato esperado</p>
           </div>
           <p className="text-xs text-slate-500 leading-relaxed">
-            Archivo <span className="font-semibold text-slate-700">.xlsx</span> con los encabezados del SII en la primera fila. Exporta el libro de compras desde el SII y ábrelo en Excel para guardarlo como <span className="font-semibold text-slate-700">.xlsx</span>. La columna <span className="font-bold text-slate-700">Folio</span> vincula con las facturas del sistema.
+            Archivo <span className="font-semibold text-slate-700">.xlsx</span> con los encabezados del SII en la primera fila. Exporta el libro de ventas desde el SII y ábrelo en Excel para guardarlo como <span className="font-semibold text-slate-700">.xlsx</span>.
           </p>
           <div className="flex flex-wrap gap-1.5 pt-1">
             {['Folio','Razon Social','Monto Neto','Monto Total','Monto IVA Recuperable'].map(c => (
@@ -205,13 +197,12 @@ const SIIImportModal = ({ supabase, onClose, onImported }) => {
           </div>
         </div>
 
-        {/* Modo de carga */}
         <div className="mb-5">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Modo de importación</p>
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => setMode('append')}
-              className={`p-3 rounded-lg border text-left transition-all ${mode === 'append' ? 'border-violet-500 bg-violet-50 text-violet-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}
+              className={`p-3 rounded-lg border text-left transition-all ${mode === 'append' ? 'border-amber-500 bg-amber-50 text-amber-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}
             >
               <p className="text-xs font-bold">Agregar</p>
               <p className="text-xs mt-0.5 opacity-70">Añade sin borrar datos existentes</p>
@@ -227,14 +218,14 @@ const SIIImportModal = ({ supabase, onClose, onImported }) => {
         </div>
 
         <div className="space-y-5">
-          <label className="relative flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50 hover:bg-violet-50/30 hover:border-violet-300 transition-all cursor-pointer group">
+          <label className="relative flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50 hover:bg-amber-50/30 hover:border-amber-300 transition-all cursor-pointer group">
             <input
               type="file"
               accept=".xlsx"
               onChange={(e) => setFile(e.target.files[0])}
               className="absolute inset-0 opacity-0 cursor-pointer"
             />
-            <Upload className="text-slate-400 mb-2 group-hover:text-violet-500 transition-colors" size={26} />
+            <Upload className="text-slate-400 mb-2 group-hover:text-amber-500 transition-colors" size={26} />
             <p className="text-sm font-medium text-slate-700 truncate px-4 max-w-full">
               {file ? file.name : 'Subir archivo Excel (.xlsx)'}
             </p>
@@ -245,7 +236,7 @@ const SIIImportModal = ({ supabase, onClose, onImported }) => {
             <div className={`p-3.5 rounded-xl text-center text-sm font-medium ${
               status.startsWith('Error') ? 'bg-rose-50 text-rose-700 border border-rose-100'
               : status.startsWith('✓') ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-              : 'bg-violet-50 text-violet-700 border border-violet-100 animate-pulse'
+              : 'bg-amber-50 text-amber-700 border border-amber-100 animate-pulse'
             }`}>
               {status}
             </div>
@@ -263,11 +254,11 @@ const SIIImportModal = ({ supabase, onClose, onImported }) => {
             <button
               disabled={!file || loading}
               onClick={processXLSX}
-              className="flex-1 bg-violet-600 text-white font-semibold py-2.5 px-5 rounded-lg shadow-sm shadow-violet-600/20 hover:shadow-md hover:bg-violet-700 active:scale-[0.98] transition-all disabled:opacity-50 disabled:pointer-events-none text-sm flex justify-center items-center gap-2"
+              className="flex-1 bg-amber-600 text-white font-semibold py-2.5 px-5 rounded-lg shadow-sm shadow-amber-600/20 hover:shadow-md hover:bg-amber-700 active:scale-[0.98] transition-all disabled:opacity-50 disabled:pointer-events-none text-sm flex justify-center items-center gap-2"
             >
               {loading ? (
                 <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> Importando...</>
-              ) : 'Iniciar Importación SII'}
+              ) : 'Iniciar Importación SII Ventas'}
             </button>
           </div>
         </div>
@@ -276,4 +267,4 @@ const SIIImportModal = ({ supabase, onClose, onImported }) => {
   );
 };
 
-export default SIIImportModal;
+export default SIIVentasImportModal;

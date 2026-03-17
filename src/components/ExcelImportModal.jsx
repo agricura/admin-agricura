@@ -239,7 +239,7 @@ const ExcelImportModal = ({ onClose, onImported, supabase }) => {
           <div className="flex items-center gap-3">
             <div className="bg-emerald-50 p-2 rounded-lg text-emerald-600"><FileSpreadsheet size={20} /></div>
             <div>
-              <h3 className="text-base font-bold text-slate-900">Importar Datos Agricura</h3>
+              <h3 className="text-base font-bold text-slate-900">Importar Agricura Docs</h3>
               <p className="text-xs text-slate-400 mt-0.5">Archivo .xlsx con 2 pestañas</p>
             </div>
           </div>

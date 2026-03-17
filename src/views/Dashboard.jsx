@@ -224,7 +224,7 @@ function Dashboard({ supabase, onEdit, onViewDetail, onShowConfirm }) {
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <div className="flex-1">
           <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-            <FileText size={20} className="text-blue-600" /> Datos Agricura
+            <FileText size={20} className="text-blue-600" /> Agricura Docs
           </h2>
           <p className="text-sm text-slate-400 mt-1">
             {invoices.length > 0 ? `${invoices.length} documentos cargados` : 'Sin datos cargados aún'}

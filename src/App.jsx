@@ -5,6 +5,7 @@ import Auth from './views/Auth';
 import Dashboard from './views/Dashboard';
 import InvoiceForm from './views/InvoiceForm';
 import SIIView from './views/SIIView';
+import SIIVentasView from './views/SIIVentasView';
 import ConfirmModal from './components/ConfirmModal';
 import InvoiceDetailModal from './components/InvoiceDetailModal';
 import DataManagement from './views/DataManagement';
@@ -99,17 +100,28 @@ function AppContent({ supabaseClient, session }) {
 
             <button
               onClick={() => nav('dashboard')}
-              title="Datos Agricura"
+              title="Agricura Docs"
               className={`w-full flex items-center rounded-lg transition-all duration-200 text-sm font-medium ${isCollapsed ? 'justify-center p-2.5' : 'gap-3 px-3.5 py-2.5'} ${currentView === 'dashboard' ? 'bg-blue-600 shadow-md shadow-blue-600/20 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
             >
-              <LayoutDashboard size={18} className="shrink-0" />{!isCollapsed && <span>Datos Agricura</span>}
+              <LayoutDashboard size={18} className="shrink-0" />{!isCollapsed && <span>Agricura Docs</span>}
             </button>
             <button
               onClick={() => nav('sii')}
-              title="Datos SII"
+              title="SII Compras"
               className={`w-full flex items-center rounded-lg transition-all duration-200 text-sm font-medium ${isCollapsed ? 'justify-center p-2.5' : 'gap-3 px-3.5 py-2.5'} ${currentView === 'sii' ? 'bg-violet-600 shadow-md shadow-violet-600/20 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
             >
-              <FileText size={18} className="shrink-0" />{!isCollapsed && <span>Datos SII</span>}
+              <FileText size={18} className="shrink-0" />{!isCollapsed && <span>SII Compras</span>}
+            </button>
+          </div>
+
+          <div className="px-1 pb-1 mt-2">
+            {!isCollapsed && <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 px-2.5">Ventas</p>}
+            <button
+              onClick={() => nav('siiVentas')}
+              title="SII Ventas"
+              className={`w-full flex items-center rounded-lg transition-all duration-200 text-sm font-medium ${isCollapsed ? 'justify-center p-2.5' : 'gap-3 px-3.5 py-2.5'} ${currentView === 'siiVentas' ? 'bg-amber-600 shadow-md shadow-amber-600/20 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
+            >
+              <FileText size={18} className="shrink-0" />{!isCollapsed && <span>SII Ventas</span>}
             </button>
           </div>
 
@@ -219,6 +231,12 @@ function AppContent({ supabaseClient, session }) {
               supabase={supabaseClient}
               onShowConfirm={(cfg) => setConfirmModal({ ...cfg, isOpen: true })}
               onViewDetail={(inv) => setViewingInvoice(inv)}
+            />
+          )}
+          {currentView === 'siiVentas' && (
+            <SIIVentasView
+              supabase={supabaseClient}
+              onShowConfirm={(cfg) => setConfirmModal({ ...cfg, isOpen: true })}
             />
           )}
           {currentView === 'bank' && (
