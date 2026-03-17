@@ -126,15 +126,14 @@ function AppContent({ supabaseClient, session }) {
         </nav>
 
         {/* Manejo de Datos — separado en la parte inferior */}
-        <div className={`shrink-0 border-t border-white/10 transition-all duration-300 ${isCollapsed ? 'px-1.5 py-2' : 'px-4 py-2'}`}>
+        <div className={`shrink-0 transition-all duration-300 ${isCollapsed ? 'px-1.5 py-2' : 'px-4 py-2'}`}>
           <button
             onClick={() => nav('dataManagement')}
             title="Manejo de Datos"
-            className={`w-full flex items-center rounded-lg transition-all duration-200 text-sm font-medium ${isCollapsed ? 'justify-center p-2.5' : 'gap-3 px-3.5 py-2.5'} ${currentView === 'dataManagement' ? 'bg-blue-600 shadow-md shadow-blue-600/20 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
+            className={`w-full flex items-center rounded-lg transition-all duration-200 text-sm font-medium ${isCollapsed ? 'justify-center p-2.5' : 'gap-3 px-3.5 py-2.5'} ${currentView === 'dataManagement' ? 'bg-blue-600 shadow-md shadow-blue-600/20 text-white' : 'bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'}`}
           >
             <Database size={18} className="shrink-0" />{!isCollapsed && <span>Manejo de Datos</span>}
           </button>
-          <div className={`mt-2 border-t border-white/10 ${isCollapsed ? '-mx-1.5' : '-mx-4'}`} />
         </div>
 
         {/* Collapse toggle — desktop only */}

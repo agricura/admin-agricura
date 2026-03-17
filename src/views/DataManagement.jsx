@@ -1,17 +1,81 @@
 // c:\Users\curam\index\admin-agricura\src\views\DataManagement.jsx
-import React, { useState, useEffect } from 'react';
-import { Upload, Plus, FileSpreadsheet, FileText, X, ChevronRight, Database, CheckCircle2, Landmark } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Upload, Plus, FileSpreadsheet, FileText, X, ChevronRight, Database, CheckCircle2, Landmark, Trash2, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
 import ExcelImportModal from '../components/ExcelImportModal';
 import SIIImportModal from '../components/SIIImportModal';
 import { loadScript } from '../lib/supabase';
+import { useToast } from '../context/ToastContext';
+
+const IS_DEV = import.meta.env.DEV;
+const SERVER_URL = 'http://localhost:3001';
 
 export default function DataManagement({ supabase, onNewDocument, onShowConfirm, onNavigateToPanel }) {
+  const { toast } = useToast();
   const [showChooser, setShowChooser] = useState(false);
   const [showAgricuraImport, setShowAgricuraImport] = useState(false);
   const [showSIIImport, setShowSIIImport] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [successType, setSuccessType] = useState(''); // 'Agricura' | 'SII'
   const [countdown, setCountdown] = useState(3);
+
+  // Linked accounts state
+  const [linkedAccounts, setLinkedAccounts] = useState([]);
+  const [loadingAccounts, setLoadingAccounts] = useState(true);
+  const [unlinkTarget, setUnlinkTarget] = useState(null); // account to unlink
+  const [deleteTransactions, setDeleteTransactions] = useState(false);
+  const [unlinking, setUnlinking] = useState(false);
+
+  const fetchLinkedAccounts = useCallback(async () => {
+    setLoadingAccounts(true);
+    try {
+      if (IS_DEV) {
+        const res = await fetch(`${SERVER_URL}/api/fintoc/links`);
+        if (!res.ok) throw new Error('Error al cargar cuentas');
+        setLinkedAccounts(await res.json());
+      } else {
+        const res = await fetch('/api/bank-links');
+        if (!res.ok) throw new Error('Error al cargar cuentas');
+        setLinkedAccounts(await res.json());
+      }
+    } catch {
+      // Table may not exist yet — show empty state
+      setLinkedAccounts([]);
+    } finally {
+      setLoadingAccounts(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchLinkedAccounts(); }, [fetchLinkedAccounts]);
+
+  const handleUnlink = async () => {
+    if (!unlinkTarget) return;
+    setUnlinking(true);
+    try {
+      if (IS_DEV) {
+        const res = await fetch(`${SERVER_URL}/api/fintoc/links/${unlinkTarget.link_id}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deleteTransactions }),
+        });
+        if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
+      } else {
+        const res = await fetch('/api/unlink-bank', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ link_id: unlinkTarget.link_id, deleteTransactions }),
+        });
+        if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
+      }
+      toast({ type: 'success', message: 'Cuenta desvinculada exitosamente' });
+      setUnlinkTarget(null);
+      setDeleteTransactions(false);
+      fetchLinkedAccounts();
+    } catch (err) {
+      toast({ type: 'error', message: err.message || 'Error al desvincular' });
+    } finally {
+      setUnlinking(false);
+    }
+  };
 
   useEffect(() => {
     if (!showSuccess) return;
@@ -51,7 +115,8 @@ export default function DataManagement({ supabase, onNewDocument, onShowConfirm,
         onSuccess: async (publicToken) => {
           // Enviar public_token a tu servidor NodeJS
           try {
-            const response = await fetch('http://localhost:3001/api/fintoc/exchange', {
+            const exchangeUrl = IS_DEV ? `${SERVER_URL}/api/fintoc/exchange` : '/api/fintoc/exchange';
+            const response = await fetch(exchangeUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ public_token: publicToken }),
@@ -59,9 +124,10 @@ export default function DataManagement({ supabase, onNewDocument, onShowConfirm,
             
             if (!response.ok) throw new Error('Error al vincular cuenta en el servidor');
             
-            handleImported('Banco Santander (Fintoc)');
+            toast({ type: 'success', message: 'Cuenta bancaria vinculada exitosamente' });
+            fetchLinkedAccounts();
           } catch (err) {
-            onShowConfirm({ title: 'Error de Vinculación', message: err.message, type: 'danger', onConfirm: () => {} });
+            toast({ type: 'error', message: err.message || 'Error al vincular cuenta' });
           }
         },
         onExit: () => { console.log('Widget cerrado'); },
@@ -128,6 +194,114 @@ export default function DataManagement({ supabase, onNewDocument, onShowConfirm,
         </button>
 
       </div>
+
+      {/* ── Cuentas Bancarias Vinculadas ─────────────────────────────────── */}
+      <div className="max-w-3xl">
+        <div className="flex items-center justify-between mb-3 px-1">
+          <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+            <Landmark size={15} className="text-emerald-600" />
+            Cuentas Bancarias Vinculadas
+          </h3>
+          <button
+            onClick={fetchLinkedAccounts}
+            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-all"
+            title="Recargar"
+          >
+            <RefreshCw size={14} />
+          </button>
+        </div>
+
+        {loadingAccounts ? (
+          <div className="bg-white border border-slate-200 rounded-xl p-8 flex items-center justify-center">
+            <Loader2 size={20} className="text-slate-400 animate-spin" />
+          </div>
+        ) : linkedAccounts.length === 0 ? (
+          <div className="bg-white border border-slate-200 rounded-xl p-8 text-center">
+            <Landmark size={28} className="text-slate-300 mx-auto mb-2" />
+            <p className="text-sm font-medium text-slate-500">No hay cuentas vinculadas</p>
+            <p className="text-xs text-slate-400 mt-1">Usa "Importar Datos → Conectar Banco" para vincular una cuenta.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {linkedAccounts.map(account => (
+              <div key={account.id} className="bg-white border border-slate-200 rounded-xl p-4 flex items-center gap-4 hover:border-slate-300 transition-colors">
+                <div className="w-10 h-10 bg-emerald-50 rounded-lg flex items-center justify-center shrink-0">
+                  <Landmark size={18} className="text-emerald-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-slate-800 truncate">
+                    {account.institution_name || 'Cuenta bancaria'}
+                  </p>
+                  <div className="flex items-center gap-3 mt-0.5">
+                    {account.holder_name && (
+                      <p className="text-xs text-slate-400 truncate">{account.holder_name}</p>
+                    )}
+                    <p className="text-xs text-slate-300">
+                      {new Date(account.created_at).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setUnlinkTarget(account); setDeleteTransactions(false); }}
+                  className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all shrink-0"
+                  title="Desvincular"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Modal Confirmar Desvinculación ─────────────────────────────── */}
+      {unlinkTarget && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/30 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200/60 w-full max-w-sm overflow-hidden">
+            <div className="px-6 pt-6 pb-4">
+              <div className="w-12 h-12 bg-rose-50 rounded-xl flex items-center justify-center mb-4">
+                <AlertTriangle size={24} className="text-rose-500" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900 mb-1">Desvincular cuenta</h3>
+              <p className="text-sm text-slate-500">
+                ¿Deseas desvincular <span className="font-semibold text-slate-700">{unlinkTarget.institution_name || 'esta cuenta'}</span>? Esta acción eliminará el acceso a los movimientos de esta cuenta.
+              </p>
+
+              <label className="flex items-start gap-3 mt-4 p-3 bg-rose-50/50 border border-rose-100 rounded-xl cursor-pointer hover:bg-rose-50 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={deleteTransactions}
+                  onChange={(e) => setDeleteTransactions(e.target.checked)}
+                  className="mt-0.5 accent-rose-500"
+                />
+                <div>
+                  <p className="text-xs font-semibold text-rose-700">También eliminar transacciones históricas</p>
+                  <p className="text-xs text-rose-500/70 mt-0.5">Se borrarán todos los movimientos bancarios asociados a esta cuenta.</p>
+                </div>
+              </label>
+            </div>
+
+            <div className="px-6 pb-6 flex gap-2">
+              <button
+                onClick={() => { setUnlinkTarget(null); setDeleteTransactions(false); }}
+                disabled={unlinking}
+                className="flex-1 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-sm font-semibold transition-all active:scale-[0.98] disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleUnlink}
+                disabled={unlinking}
+                className="flex-1 px-4 py-2.5 bg-rose-500 hover:bg-rose-600 text-white rounded-lg text-sm font-semibold transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {unlinking ? (
+                  <><Loader2 size={14} className="animate-spin" /> Desvinculando...</>
+                ) : 'Desvincular'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Chooser popup ─────────────────────────────────────────────────── */}
       {showChooser && (

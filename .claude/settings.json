@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx vite:*)"
+      "Bash(npx vite:*)",
+      "Read(//c/Users/curam/AppData/Local/Temp/claude/c--Users-curam-admin-agricura/5c026c81-c34c-43bf-a0dd-054cf5d8129e/tasks/**)"
     ]
   }
 }
