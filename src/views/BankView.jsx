@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Landmark, RefreshCw, TrendingUp, TrendingDown, CreditCard,
   AlertCircle, Loader2, ArrowUpRight, ArrowDownLeft, Database, Clock,
-  ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Search, Filter, X
+  ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Search, Filter, X, Download
 } from 'lucide-react';
 import { formatDate } from '../utils/formatters';
 import MultiSelect from '../components/MultiSelect';
@@ -211,6 +211,27 @@ export default function BankView({ supabase }) {
 
   const clearFilters = () => setFilters(EMPTY_BANK_FILTERS);
 
+  // ── Excel Export ──────────────────────────────────────────────────────────
+  const handleExportExcel = () => {
+    const XLSX = window.XLSX;
+    if (!XLSX) { toast({ type: 'error', message: 'La librería Excel aún no ha cargado. Intenta en un momento.' }); return; }
+
+    const data = filtered.map(row => ({
+      'Fecha': row.date ? formatDate(row.date) : '',
+      'Descripción': row.description ?? '',
+      'Monto': Number(row.amount) || 0,
+      'Tipo': row.amount > 0 ? 'Ingreso' : 'Egreso',
+      'Remitente': row.sender_name ?? '',
+      'Destinatario': row.recipient_name ?? '',
+      'Cuenta': selectedAccount?.account_name ?? '',
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Banco');
+    const today = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(wb, `banco_${today}.xlsx`);
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -363,17 +384,28 @@ export default function BankView({ supabase }) {
                     ))}
                   </div>
 
-                  {/* Botón Actualizar — alineado a la derecha */}
-                  <button
-                    onClick={handleRefresh}
-                    disabled={loading || syncing}
-                    className="flex items-center gap-2 px-4 py-2 ml-auto bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 hover:border-emerald-300 hover:text-emerald-700 hover:bg-emerald-50 transition-all active:scale-[0.97] disabled:opacity-50"
-                  >
-                    {syncing
-                      ? <Loader2 size={15} className="animate-spin" />
-                      : <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />}
-                    Actualizar
-                  </button>
+                  {/* Exportar Excel + Actualizar — alineados a la derecha */}
+                  <div className="flex items-center gap-2 ml-auto">
+                    <button
+                      onClick={handleExportExcel}
+                      disabled={filtered.length === 0}
+                      className="flex items-center gap-2 px-3.5 py-2 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:border-emerald-300 hover:text-emerald-700 hover:bg-emerald-50 bg-white transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+                      title="Exportar movimientos filtrados a Excel"
+                    >
+                      <Download size={15} />
+                      <span>Exportar Excel</span>
+                    </button>
+                    <button
+                      onClick={handleRefresh}
+                      disabled={loading || syncing}
+                      className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 hover:border-emerald-300 hover:text-emerald-700 hover:bg-emerald-50 transition-all active:scale-[0.97] disabled:opacity-50"
+                    >
+                      {syncing
+                        ? <Loader2 size={15} className="animate-spin" />
+                        : <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />}
+                      Actualizar
+                    </button>
+                  </div>
                 </div>
 
                 {showFilters && (
