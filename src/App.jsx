@@ -132,7 +132,7 @@ function AppContent({ supabaseClient, session }) {
               title="Datos Bancarios"
               className={`w-full flex items-center rounded-lg transition-all duration-200 text-sm font-medium ${isCollapsed ? 'justify-center p-2.5' : 'gap-3 px-3.5 py-2.5'} ${currentView === 'bank' ? 'bg-emerald-600 shadow-md shadow-emerald-600/20 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
             >
-              <Landmark size={18} className="shrink-0" />{!isCollapsed && <span>Datos Bancarios</span>}
+              <Landmark size={18} className="shrink-0" />{!isCollapsed && <span>Mis Bancos</span>}
             </button>
           </div>
         </nav>

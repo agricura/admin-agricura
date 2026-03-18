@@ -241,7 +241,7 @@ export default function BankView({ supabase }) {
         <div>
           <h2 className="text-2xl lg:text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-3">
             <Landmark size={28} className="text-emerald-600" />
-            Datos Bancarios
+            Mis Bancos
           </h2>
           <p className="text-slate-400 text-sm font-medium mt-1 flex items-center gap-2">
             Banco Santander Chile · sincronizado automáticamente cada 6h.
